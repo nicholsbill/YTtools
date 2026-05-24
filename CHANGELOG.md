@@ -69,6 +69,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Search now honors the channel filter. The `channel` query parameter was typed
+  as a plain `list[str]`, which FastAPI treated as a request body, so the
+  selected channels were ignored and every channel was searched. It is now a
+  proper repeatable query parameter.
 - The Settings model field is now a dropdown whenever a model list is available,
   instead of a free-text input that password managers (1Password, LastPass)
   decorate with overlapping icons. The configured model stays selectable even if

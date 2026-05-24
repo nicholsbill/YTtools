@@ -14,7 +14,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -386,7 +386,7 @@ async def cancel_fetch(request: Request, job_id: str) -> dict[str, bool]:
 async def search_endpoint(
     request: Request,
     q: str,
-    channel: list[str] | None = None,
+    channel: list[str] | None = Query(default=None),
     published_after: str | None = None,
     published_before: str | None = None,
     min_minutes: float | None = None,

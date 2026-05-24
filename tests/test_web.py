@@ -93,6 +93,27 @@ def test_search_endpoint(client: TestClient) -> None:
     assert "t=12s" in result["url"]
 
 
+def test_search_channel_filter_applies(client: TestClient) -> None:
+    _seed(client)  # UC_x / vid00000001, transcript mentions "machine learning"
+    database: Database = client.app.state.db
+    database.upsert_channel(Channel(id="UC_other", title="Other"))
+    database.upsert_video(Video(id="vidother001", channel_id="UC_other", title="Other ML"))
+    database.upsert_transcript(
+        Transcript(
+            video_id="vidother001",
+            language="en",
+            is_auto_generated=True,
+            text="another take on machine learning entirely",
+        )
+    )
+    # Both channels match the query…
+    assert client.get("/api/search", params={"q": "machine"}).json()["total"] == 2
+    # …but filtering by one channel returns only that channel's video.
+    filtered = client.get("/api/search", params={"q": "machine", "channel": "UC_x"}).json()
+    assert filtered["total"] == 1
+    assert filtered["results"][0]["video_id"] == "vid00000001"
+
+
 def test_search_invalid_query_returns_400(client: TestClient) -> None:
     response = client.get("/api/search", params={"q": "   "})
     assert response.status_code == 400
