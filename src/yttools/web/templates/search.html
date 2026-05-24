@@ -74,6 +74,8 @@
                class="font-medium text-accent hover:underline" x-text="result.title"></a>
             <span class="text-xs text-zinc-400" x-text="result.channel_title"></span>
           </div>
+          <div class="text-xs text-zinc-400 mt-0.5" x-show="statsText(result)"
+               x-text="statsText(result)"></div>
           <p class="text-sm mt-1" x-html="render(result.snippet)"></p>
           <div class="mt-2 text-xs">
             <a :href="result.url" target="_blank" rel="noopener"
@@ -88,10 +90,12 @@
   </div>
 
   <div x-show="transcript" class="border-t border-zinc-200 dark:border-zinc-800 pt-4">
-    <div class="flex items-center justify-between mb-2">
+    <div class="flex items-center justify-between mb-1">
       <h2 class="font-medium" x-text="transcript?.video?.title"></h2>
       <button class="text-sm text-zinc-500 hover:text-accent" @click="transcript = null">close</button>
     </div>
+    <div class="text-xs text-zinc-400 mb-2" x-show="statsText(transcript?.video)"
+         x-text="statsText(transcript?.video)"></div>
     <div class="max-h-96 overflow-auto space-y-1 text-sm">
       <template x-for="(seg, i) in (transcript?.transcript?.segments || [])" :key="i">
         <p>

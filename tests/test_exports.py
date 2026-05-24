@@ -77,6 +77,22 @@ def test_render_txt_contains_prose() -> None:
     assert "hello world goodbye" in txt
 
 
+def test_exports_include_stats_line() -> None:
+    video = Video(
+        id="dQw4w9WgXcQ",
+        title="A Talk",
+        duration_seconds=12,
+        view_count=12345,
+        like_count=678,
+        comment_count=9,
+    )
+    for fmt in ("txt", "md"):
+        body = render(fmt, video, _transcript())
+        assert "12,345 views" in body
+        assert "678 likes" in body
+        assert "9 comments" in body
+
+
 def test_write_export_creates_file(tmp_path: Path) -> None:
     path = write_export(tmp_path, "md", _video(), _transcript())
     assert path.exists()

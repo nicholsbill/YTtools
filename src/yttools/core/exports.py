@@ -38,13 +38,36 @@ def format_clock(seconds: float, *, srt: bool = False) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+def stats_line(video: Video) -> str:
+    """Human-readable one-line summary of a video's stats, omitting blanks."""
+    parts: list[str] = []
+    if video.view_count is not None:
+        parts.append(f"{video.view_count:,} views")
+    if video.like_count is not None:
+        parts.append(f"{video.like_count:,} likes")
+    if video.comment_count is not None:
+        parts.append(f"{video.comment_count:,} comments")
+    if video.published_at is not None:
+        parts.append(f"published {video.published_at.date().isoformat()}")
+    if video.duration_seconds:
+        parts.append(format_clock(float(video.duration_seconds)))
+    return " · ".join(parts)
+
+
 def render_txt(video: Video, transcript: Transcript) -> str:
     header = f"{video.title}\n{watch_url(video.id)}\n"
+    stats = stats_line(video)
+    if stats:
+        header += f"{stats}\n"
     return f"{header}\n{transcript.text}\n"
 
 
 def render_markdown(video: Video, transcript: Transcript) -> str:
-    lines = [f"# {video.title}", "", f"[Watch on YouTube]({watch_url(video.id)})", ""]
+    lines = [f"# {video.title}", "", f"[Watch on YouTube]({watch_url(video.id)})"]
+    stats = stats_line(video)
+    if stats:
+        lines.append(f"*{stats}*")
+    lines.append("")
     for segment in transcript.segments:
         stamp = format_clock(segment.start)
         link = watch_url(video.id, segment.start)

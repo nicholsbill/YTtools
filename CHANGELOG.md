@@ -8,6 +8,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Video stats are now visible and exportable. Fetch already stored view and like
+  counts; this adds `comment_count`, shows views/likes/comments in search results
+  and the transcript view, and includes a stats header in the `.txt` and `.md`
+  exports (JSON already carried the full record). Re-running Fetch with
+  "Metadata only" + "Force refresh" updates the counts without re-downloading
+  transcripts.
+
 - Hosted LLM providers are now wired: Anthropic, OpenAI, and Gemini implement
   completion, streaming, and JSON mode by calling each vendor's REST API
   directly (no vendor SDKs). Health checks list available models. Embeddings

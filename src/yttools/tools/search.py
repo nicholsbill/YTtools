@@ -50,6 +50,9 @@ class SearchResult(BaseModel):
     channel_title: str | None = None
     published_at: datetime | None = None
     duration_seconds: int | None = None
+    view_count: int | None = None
+    like_count: int | None = None
+    comment_count: int | None = None
     score: float
     snippet: str
     start_seconds: float
@@ -169,6 +172,9 @@ def search(
                 channel_title=row["channel_title"],
                 published_at=_parse_dt(row["published_at"]),
                 duration_seconds=row["duration_seconds"],
+                view_count=row["view_count"],
+                like_count=row["like_count"],
+                comment_count=row["comment_count"],
                 score=float(row["score"]),
                 snippet=_display_snippet(marked),
                 start_seconds=start,

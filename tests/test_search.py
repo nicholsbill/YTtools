@@ -54,6 +54,9 @@ def search_db(db: Database) -> Database:
             title="Deep dive",
             duration_seconds=6000,
             published_at=datetime(2024, 6, 20, tzinfo=UTC),
+            view_count=4242,
+            like_count=99,
+            comment_count=8,
         )
     )
     db.upsert_transcript(
@@ -96,6 +99,10 @@ def test_search_returns_ranked_results(search_db: Database) -> None:
     assert response.total == 2
     # The video that says "machine" most often ranks first.
     assert response.results[0].video_id == "vid_bbbbbbb2"
+    # Stats ride along with each result.
+    assert response.results[0].view_count == 4242
+    assert response.results[0].like_count == 99
+    assert response.results[0].comment_count == 8
 
 
 def test_snippet_highlights_match(search_db: Database) -> None:

@@ -17,6 +17,10 @@ yttools fetch URL --refresh --lang en
 - Re-runs skip videos that already have a transcript unless `--refresh` is passed
   or the stored copy is more than seven days old.
 - Private, deleted, members-only, and live videos are logged and skipped.
+- Stores per-video stats (view, like, and comment counts), duration, publish
+  date, tags, and chapters alongside the transcript. Stats are a snapshot from
+  fetch time; refresh them with "Metadata only" + `--refresh` (no transcript
+  re-download).
 - Captions are still extracted from videos that offer no downloadable media
   format, so a "Requested format is not available" yt-dlp error no longer fails
   the video.

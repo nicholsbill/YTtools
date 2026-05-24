@@ -210,6 +210,7 @@ def _metadata_from_json(data: dict[str, Any]) -> VideoMetadata:
         duration_seconds=int(duration) if isinstance(duration, (int, float)) else None,
         view_count=data.get("view_count"),
         like_count=data.get("like_count"),
+        comment_count=data.get("comment_count"),
         thumbnail_url=data.get("thumbnail"),
         chapters=chapters,
         tags=[str(tag) for tag in (data.get("tags") or [])],

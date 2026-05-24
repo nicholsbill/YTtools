@@ -60,6 +60,7 @@ async def test_get_video_metadata_builds_model(monkeypatch: pytest.MonkeyPatch) 
         "duration": 642.0,
         "view_count": 50,
         "like_count": 5,
+        "comment_count": 12,
         "thumbnail": "https://i.ytimg.com/x.jpg",
         "chapters": [{"start_time": 0.0, "title": "Intro"}, {"start_time": 30.0, "title": "Body"}],
         "tags": ["talk", "demo"],
@@ -72,6 +73,9 @@ async def test_get_video_metadata_builds_model(monkeypatch: pytest.MonkeyPatch) 
     assert meta.channel_id == "UCsT0YIqwnpJCM-mx7-gSA4Q"
     assert meta.channel_handle == "@example"
     assert meta.duration_seconds == 642
+    assert meta.view_count == 50
+    assert meta.like_count == 5
+    assert meta.comment_count == 12
     assert len(meta.chapters) == 2
     assert meta.published_at is not None
     assert "--skip-download" in captured["args"]

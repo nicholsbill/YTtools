@@ -17,6 +17,23 @@ function clock(seconds) {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+function formatCount(value) {
+  if (value == null) return "";
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+  if (value >= 1e3) return `${(value / 1e3).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(value);
+}
+
+// A "1.2K views · 340 likes · 12 comments" line from a video/result object.
+function statsText(item) {
+  if (!item) return "";
+  const parts = [];
+  if (item.view_count != null) parts.push(`${formatCount(item.view_count)} views`);
+  if (item.like_count != null) parts.push(`${formatCount(item.like_count)} likes`);
+  if (item.comment_count != null) parts.push(`${formatCount(item.comment_count)} comments`);
+  return parts.join(" · ");
+}
+
 // Convert the markdown-style **bold** match markers into highlighted spans.
 function renderSnippet(snippet) {
   const escaped = escapeHtml(snippet);
@@ -149,6 +166,7 @@ function searchPanel() {
     error: "",
     transcript: null,
     clock,
+    statsText,
     render: renderSnippet,
     async loadChannels() {
       try {

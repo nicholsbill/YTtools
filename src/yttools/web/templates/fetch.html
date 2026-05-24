@@ -34,6 +34,11 @@
         <input type="checkbox" x-model="forceRefresh"> Force refresh
       </label>
     </div>
+    <p class="text-xs text-zinc-500 dark:text-zinc-400">
+      To refresh view/like/comment counts without re-downloading transcripts,
+      choose <span class="font-medium">Metadata only</span> and check
+      <span class="font-medium">Force refresh</span>.
+    </p>
 
     <div class="flex items-center gap-3">
       <button @click="start()" :disabled="running"

@@ -230,14 +230,15 @@ class Database:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO videos (id, channel_id, title, description, published_at,"
-                " duration_seconds, view_count, like_count, thumbnail_url, chapters_json,"
-                " tags_json, last_refreshed_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " duration_seconds, view_count, like_count, comment_count, thumbnail_url,"
+                " chapters_json, tags_json, last_refreshed_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT(id) DO UPDATE SET channel_id=excluded.channel_id,"
                 " title=excluded.title, description=excluded.description,"
                 " published_at=excluded.published_at, duration_seconds=excluded.duration_seconds,"
                 " view_count=excluded.view_count, like_count=excluded.like_count,"
-                " thumbnail_url=excluded.thumbnail_url, chapters_json=excluded.chapters_json,"
+                " comment_count=excluded.comment_count, thumbnail_url=excluded.thumbnail_url,"
+                " chapters_json=excluded.chapters_json,"
                 " tags_json=excluded.tags_json, last_refreshed_at=excluded.last_refreshed_at",
                 (
                     video.id,
@@ -248,6 +249,7 @@ class Database:
                     video.duration_seconds,
                     video.view_count,
                     video.like_count,
+                    video.comment_count,
                     video.thumbnail_url,
                     json.dumps([chapter.model_dump() for chapter in video.chapters]),
                     json.dumps(video.tags),
@@ -621,7 +623,9 @@ class Database:
             "SELECT f.video_id AS video_id, bm25(transcripts_fts) AS score,"
             " snippet(transcripts_fts, 1, char(2), char(3), ' … ', 12) AS snippet,"
             " v.title AS title, v.channel_id AS channel_id, v.published_at AS published_at,"
-            " v.duration_seconds AS duration_seconds, c.title AS channel_title"
+            " v.duration_seconds AS duration_seconds, v.view_count AS view_count,"
+            " v.like_count AS like_count, v.comment_count AS comment_count,"
+            " c.title AS channel_title"
             " FROM transcripts_fts f JOIN videos v ON v.id = f.video_id"
             " LEFT JOIN channels c ON c.id = v.channel_id"
             " WHERE transcripts_fts MATCH ?" + where + " ORDER BY score LIMIT ? OFFSET ?"
@@ -747,6 +751,7 @@ def _row_to_video(row: sqlite3.Row) -> Video:
         duration_seconds=row["duration_seconds"],
         view_count=row["view_count"],
         like_count=row["like_count"],
+        comment_count=row["comment_count"],
         thumbnail_url=row["thumbnail_url"],
         chapters=chapters,
         tags=tags,

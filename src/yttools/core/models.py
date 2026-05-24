@@ -71,6 +71,7 @@ class Video(BaseModel):
     duration_seconds: int | None = None
     view_count: int | None = None
     like_count: int | None = None
+    comment_count: int | None = None
     thumbnail_url: str | None = None
     chapters: list[Chapter] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
@@ -159,6 +160,7 @@ class VideoMetadata(BaseModel):
     duration_seconds: int | None = None
     view_count: int | None = None
     like_count: int | None = None
+    comment_count: int | None = None
     thumbnail_url: str | None = None
     chapters: list[Chapter] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
@@ -185,6 +187,7 @@ class VideoMetadata(BaseModel):
             duration_seconds=self.duration_seconds,
             view_count=self.view_count,
             like_count=self.like_count,
+            comment_count=self.comment_count,
             thumbnail_url=self.thumbnail_url,
             chapters=self.chapters,
             tags=self.tags,
