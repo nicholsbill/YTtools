@@ -31,6 +31,14 @@ class LLMError(RuntimeError):
     """A provider request failed."""
 
 
+def _ollama_http_error(prefix: str, error: httpx.HTTPError) -> LLMError:
+    """Build an LLMError that surfaces Ollama's response body (e.g. "model not found")."""
+    if isinstance(error, httpx.HTTPStatusError):
+        body = error.response.text.strip()[:300]
+        return LLMError(f"{prefix} ({error.response.status_code}): {body or error}")
+    return LLMError(f"{prefix}: {error}")
+
+
 class ProviderHealth(BaseModel):
     name: str
     available: bool
@@ -114,7 +122,7 @@ class OllamaProvider:
                 response.raise_for_status()
                 data = response.json()
             except httpx.HTTPError as error:
-                raise LLMError(f"Ollama request failed: {error}") from error
+                raise _ollama_http_error("Ollama request failed", error) from error
             finally:
                 if owned:
                     await client.aclose()
@@ -145,21 +153,27 @@ class OllamaProvider:
                         if content:
                             yield content
             except httpx.HTTPError as error:
-                raise LLMError(f"Ollama stream failed: {error}") from error
+                raise _ollama_http_error("Ollama stream failed", error) from error
             finally:
                 if owned:
                     await client.aclose()
 
     async def embed(self, texts: list[str], model: str | None = None) -> list[list[float]]:
-        payload = {"model": model or self.embedding_model, "input": texts}
+        model_name = model or self.embedding_model
         async with self._semaphore:
             client, owned = self._client_cm()
             try:
-                response = await client.post(f"{self.base_url}/api/embed", json=payload)
+                response = await client.post(
+                    f"{self.base_url}/api/embed", json={"model": model_name, "input": texts}
+                )
+                if response.status_code == 404:
+                    # Older Ollama builds lack /api/embed; fall back to the
+                    # legacy per-prompt /api/embeddings endpoint.
+                    return await self._embed_legacy(client, model_name, texts)
                 response.raise_for_status()
                 data = response.json()
             except httpx.HTTPError as error:
-                raise LLMError(f"Ollama embedding failed: {error}") from error
+                raise _ollama_http_error("Ollama embedding failed", error) from error
             finally:
                 if owned:
                     await client.aclose()
@@ -167,6 +181,21 @@ class OllamaProvider:
         if not isinstance(embeddings, list):
             raise LLMError("Ollama returned no embeddings")
         return [[float(value) for value in vector] for vector in embeddings]
+
+    async def _embed_legacy(
+        self, client: httpx.AsyncClient, model_name: str, texts: list[str]
+    ) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        for text in texts:
+            response = await client.post(
+                f"{self.base_url}/api/embeddings", json={"model": model_name, "prompt": text}
+            )
+            response.raise_for_status()
+            vector = response.json().get("embedding")
+            if not isinstance(vector, list):
+                raise LLMError("Ollama returned no embedding")
+            vectors.append([float(value) for value in vector])
+        return vectors
 
     async def health_check(self) -> ProviderHealth:
         client, owned = self._client_cm()

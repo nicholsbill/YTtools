@@ -86,6 +86,28 @@ async def test_embed_returns_vectors() -> None:
     assert vectors == [[0.1, 0.2], [0.3, 0.4]]
 
 
+async def test_embed_falls_back_to_legacy_endpoint() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/embed":
+            return httpx.Response(404, json={"error": "not found"})
+        if request.url.path == "/api/embeddings":
+            return httpx.Response(200, json={"embedding": [0.5, 0.6]})
+        return httpx.Response(404)
+
+    vectors = await _ollama(handler).embed(["a"])
+    assert vectors == [[0.5, 0.6]]
+
+
+async def test_embed_surfaces_model_not_found_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            404, json={"error": "model 'nomic-embed-text' not found, try pulling it first"}
+        )
+
+    with pytest.raises(LLMError, match="not found"):
+        await _ollama(handler).embed(["a"])
+
+
 async def test_health_check_available() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"models": [{"name": "llama3.1:8b"}]})
