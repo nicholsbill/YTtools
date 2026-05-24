@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- AI tool results now show an estimated API cost when a hosted model is used.
+  Providers track real token usage from each response; after a run the tool page
+  shows e.g. `~$0.031 · 15.2k in / 840 out · anthropic` (summed across all the
+  calls a tool made). Local Ollama shows "no API cost". Prices come from an
+  approximate per-model table in `core/llm.py` (edit it as vendor prices move);
+  unknown models show token counts with "price unknown".
+
 ### Changed
 
 - Blog now writes an *original* piece in a style you choose (a `style` field /

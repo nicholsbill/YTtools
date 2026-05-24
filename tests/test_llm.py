@@ -19,7 +19,9 @@ from yttools.core.llm import (
     OllamaProvider,
     OpenAIProvider,
     ProviderHealth,
+    Usage,
     build_providers,
+    estimate_cost,
     get_provider,
 )
 
@@ -84,6 +86,42 @@ async def test_embed_returns_vectors() -> None:
     provider = _ollama(handler)
     vectors = await provider.embed(["a", "b"])
     assert vectors == [[0.1, 0.2], [0.3, 0.4]]
+
+
+def test_estimate_cost_known_and_unknown() -> None:
+    usage = Usage(input_tokens=1_000_000, output_tokens=1_000_000)
+    # claude-sonnet rate is (3.0, 15.0) per 1M tokens.
+    assert estimate_cost("claude-sonnet-4-6", usage) == 18.0
+    assert estimate_cost("some-unknown-model", usage) is None
+
+
+async def test_complete_records_token_usage() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"message": {"content": "hi"}, "prompt_eval_count": 100, "eval_count": 20},
+        )
+
+    provider = _ollama(handler)
+    await provider.complete("q")
+    assert provider.usage.input_tokens == 100
+    assert provider.usage.output_tokens == 20
+
+
+async def test_openai_records_token_usage() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "x"}}],
+                "usage": {"prompt_tokens": 50, "completion_tokens": 10},
+            },
+        )
+
+    provider = _hosted(OpenAIProvider, handler)
+    await provider.complete("q")
+    assert provider.usage.input_tokens == 50
+    assert provider.usage.output_tokens == 10
 
 
 async def test_embed_falls_back_to_legacy_endpoint() -> None:

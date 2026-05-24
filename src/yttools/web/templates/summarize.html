@@ -48,6 +48,8 @@
     </div>
   </form>
 
+  <div x-show="cost && !running" class="text-xs text-zinc-400" x-text="formatCost(cost)"></div>
+
   <div class="space-y-4">
     <template x-for="section in sections" :key="section.summary_type">
       <div class="border border-zinc-200 dark:border-zinc-800 rounded p-4">

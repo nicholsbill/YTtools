@@ -244,6 +244,8 @@ def test_blog_generates_article(client: TestClient, monkeypatch: pytest.MonkeyPa
     assert "An original piece." in data["markdown"]
     assert "watch?v=vid00000001&t=12s" in data["markdown"]
     assert data["word_count"] > 0
+    # A cost estimate is attached for the (non-local) provider used.
+    assert data["cost"]["local"] is False
 
 
 def test_blog_unknown_video_errors(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

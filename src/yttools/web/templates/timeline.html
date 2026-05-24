@@ -50,6 +50,8 @@
     </div>
   </form>
 
+  <div x-show="cost" class="text-xs text-zinc-400" x-text="formatCost(cost)"></div>
+
   <div x-show="hasData">
     <canvas x-ref="chart" height="120"></canvas>
     <table class="w-full text-sm border-collapse mt-4">

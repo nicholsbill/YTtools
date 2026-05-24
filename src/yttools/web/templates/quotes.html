@@ -68,6 +68,7 @@
   <div x-show="quotes.length" class="space-y-2">
     <div class="flex items-center gap-3 text-sm">
       <span class="text-zinc-500" x-text="quotes.length + ' quote(s)'"></span>
+      <span x-show="cost" class="text-xs text-zinc-400" x-text="formatCost(cost)"></span>
       <select x-model="filterType" class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs">
         <option value="">all types</option>
         <template x-for="t in allTypes" :key="t"><option :value="t" x-text="t"></option></template>

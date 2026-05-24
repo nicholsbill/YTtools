@@ -63,6 +63,7 @@
       <span x-show="running" class="text-xs text-zinc-500" x-text="progress"></span>
       <span x-show="wordCount && !running" class="text-xs text-zinc-500"
             x-text="wordCount + ' words · ' + (modelUsed || 'model')"></span>
+      <span x-show="cost && !running" class="text-xs text-zinc-400" x-text="formatCost(cost)"></span>
       <span x-show="error" class="text-sm text-accent" x-text="error"></span>
     </div>
   </form>

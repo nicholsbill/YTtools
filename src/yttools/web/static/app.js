@@ -34,6 +34,16 @@ function statsText(item) {
   return parts.join(" · ");
 }
 
+// Render a job's cost estimate (or "" when there's nothing to show).
+function formatCost(cost) {
+  if (!cost) return "";
+  if (cost.local) return "local model · no API cost";
+  const io = `${formatCount(cost.input_tokens)} in / ${formatCount(cost.output_tokens)} out`;
+  if (cost.usd == null) return `${io} · price unknown for ${cost.model || cost.provider}`;
+  const usd = cost.usd < 0.1 ? `$${cost.usd.toFixed(4)}` : `$${cost.usd.toFixed(2)}`;
+  return `~${usd} · ${io}${cost.provider ? ` · ${cost.provider}` : ""}`;
+}
+
 // Convert the markdown-style **bold** match markers into highlighted spans.
 function renderSnippet(snippet) {
   const escaped = escapeHtml(snippet);
@@ -285,6 +295,7 @@ function blogPanel() {
     error: "",
     progress: "",
     jobId: null,
+    cost: null,
     markdown: "",
     rendered: "",
     modelUsed: "",
@@ -408,7 +419,10 @@ async function runInto(self, tool, url, body, apply) {
   try {
     self.jobId = await beginJob(tool, url, body);
     const result = await pollJob(tool, self.jobId, (p) => (self.progress = formatProgress(p)));
-    if (result) apply(result);
+    if (result) {
+      apply(result);
+      self.cost = result.cost || null;
+    }
   } catch (e) {
     self.error = e.message;
   } finally {
@@ -434,7 +448,10 @@ async function resumeInto(self, tool, apply) {
   self.jobId = jobId;
   try {
     const result = await pollJob(tool, jobId, (p) => (self.progress = formatProgress(p)));
-    if (result) apply(result);
+    if (result) {
+      apply(result);
+      self.cost = result.cost || null;
+    }
   } catch (e) {
     self.error = e.message;
   } finally {
@@ -454,6 +471,7 @@ function summarizePanel() {
     error: "",
     progress: "",
     jobId: null,
+    cost: null,
     sections: [],
     render: renderMarkdown,
     async loadChannels() {
@@ -522,6 +540,7 @@ function quotesPanel() {
     error: "",
     progress: "",
     jobId: null,
+    cost: null,
     quotes: [],
     filterType: "",
     clock,
@@ -577,6 +596,7 @@ function comparePanel() {
     error: "",
     progress: "",
     jobId: null,
+    cost: null,
     result: null,
     tab: "Topic overlap",
     tabs: ["Topic overlap", "Vocabulary", "Timing"],
@@ -624,6 +644,7 @@ function timelinePanel() {
     error: "",
     progress: "",
     jobId: null,
+    cost: null,
     stats: [],
     hasData: false,
     async loadChannels() {
@@ -690,6 +711,7 @@ function askPanel() {
     error: "",
     progress: "",
     jobId: null,
+    cost: null,
     question: "",
     answer: "",
     rendered: "",
@@ -761,6 +783,7 @@ function askPanel() {
           this.rendered = renderMarkdown(data.answer);
           this.citations = data.citations;
           this.steps = data.steps || [];
+          this.cost = data.cost || null;
         }
       } catch (e) {
         this.error = e.message;

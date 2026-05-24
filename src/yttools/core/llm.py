@@ -46,6 +46,52 @@ class ProviderHealth(BaseModel):
     models: list[str] = Field(default_factory=list)
 
 
+class Usage(BaseModel):
+    """Token usage accumulated across a provider's calls."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    def add(self, input_tokens: Any, output_tokens: Any) -> None:
+        self.input_tokens += int(input_tokens or 0)
+        self.output_tokens += int(output_tokens or 0)
+
+
+# Approximate USD per 1M tokens (input, output). Vendor prices change over time;
+# these are estimates, matched against the model id by the longest key prefix.
+# `yttools config set` has no hook here — update this table when prices move.
+_PRICING: dict[str, tuple[float, float]] = {
+    "claude-opus": (15.0, 75.0),
+    "claude-sonnet": (3.0, 15.0),
+    "claude-haiku": (0.80, 4.0),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o": (2.50, 10.0),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1": (2.00, 8.00),
+    "o4-mini": (1.10, 4.40),
+    "gemini-2.0-flash": (0.10, 0.40),
+    "gemini-1.5-flash": (0.075, 0.30),
+    "gemini-1.5-pro": (1.25, 5.0),
+    "gemini-2.5-pro": (1.25, 10.0),
+}
+
+
+def _price_for(model: str) -> tuple[float, float] | None:
+    name = (model or "").lower()
+    matches = [(key, rate) for key, rate in _PRICING.items() if name.startswith(key)]
+    if not matches:
+        return None
+    return max(matches, key=lambda item: len(item[0]))[1]
+
+
+def estimate_cost(model: str, usage: Usage) -> float | None:
+    """Estimate USD cost for a model's token usage, or None if price is unknown."""
+    rate = _price_for(model)
+    if rate is None:
+        return None
+    return usage.input_tokens / 1_000_000 * rate[0] + usage.output_tokens / 1_000_000 * rate[1]
+
+
 @runtime_checkable
 class LLMProvider(Protocol):
     name: str
@@ -96,6 +142,7 @@ class OllamaProvider:
         self.embedding_model = embedding_model
         self._semaphore = asyncio.Semaphore(concurrency)
         self._client = client
+        self.usage = Usage()
 
     def _client_cm(self) -> tuple[httpx.AsyncClient, bool]:
         if self._client is not None:
@@ -126,6 +173,7 @@ class OllamaProvider:
             finally:
                 if owned:
                     await client.aclose()
+        self.usage.add(data.get("prompt_eval_count"), data.get("eval_count"))
         return str(data.get("message", {}).get("content", ""))
 
     async def stream(
@@ -265,6 +313,7 @@ class _HostedProvider:
         self.api_key = api_key
         self._semaphore = asyncio.Semaphore(concurrency)
         self._client = client
+        self.usage = Usage()
 
     def _client_cm(self) -> tuple[httpx.AsyncClient, bool]:
         if self._client is not None:
@@ -423,6 +472,8 @@ class AnthropicProvider(_HostedProvider):
         data = await self._post_json(
             f"{self.api_base}/messages", json=body, headers=self._headers()
         )
+        usage = data.get("usage", {})
+        self.usage.add(usage.get("input_tokens"), usage.get("output_tokens"))
         blocks = data.get("content") or []
         return "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
 
@@ -514,6 +565,8 @@ class OpenAIProvider(_HostedProvider):
         data = await self._post_json(
             f"{self.api_base}/chat/completions", json=body, headers=self._headers()
         )
+        usage = data.get("usage", {})
+        self.usage.add(usage.get("prompt_tokens"), usage.get("completion_tokens"))
         choices = data.get("choices") or []
         if not choices:
             raise LLMError("OpenAI returned no choices")
@@ -605,6 +658,8 @@ class GeminiProvider(_HostedProvider):
             headers={"Content-Type": "application/json"},
             params=self._key_params(),
         )
+        usage = data.get("usageMetadata", {})
+        self.usage.add(usage.get("promptTokenCount"), usage.get("candidatesTokenCount"))
         return self._delta(data)
 
     async def stream(

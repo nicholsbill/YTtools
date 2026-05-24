@@ -22,7 +22,7 @@ from yttools import config as config_module
 from yttools.config import load_settings
 from yttools.core import exports
 from yttools.core.db import Database
-from yttools.core.llm import build_provider, build_providers, get_provider
+from yttools.core.llm import Usage, build_provider, build_providers, estimate_cost, get_provider
 from yttools.core.progress import ProgressCallback
 from yttools.tools.agent import run_agent
 from yttools.tools.ask import embedding_provider, index_channel
@@ -146,11 +146,41 @@ async def videos(request: Request, channel: str | None = None) -> list[dict[str,
 JobRunner = Callable[[ProgressCallback], Awaitable[BaseModel]]
 
 
-def _start_job(request: Request, kind: str, run: JobRunner) -> dict[str, str]:
+def _job_cost(providers: tuple[Any, ...]) -> dict[str, Any]:
+    """Estimate the API cost of a finished job from its providers' token usage."""
+    total = Usage()
+    model = ""
+    provider_name = ""
+    hosted = False
+    for provider in providers:
+        if getattr(provider, "name", "") in ("", "ollama"):
+            continue  # local provider: no API cost
+        hosted = True
+        provider_name = getattr(provider, "name", "")
+        model = getattr(provider, "default_model", "") or model
+        usage = getattr(provider, "usage", None)
+        if isinstance(usage, Usage):
+            total.add(usage.input_tokens, usage.output_tokens)
+    if not hosted:
+        return {"local": True}
+    return {
+        "local": False,
+        "provider": provider_name,
+        "model": model,
+        "input_tokens": total.input_tokens,
+        "output_tokens": total.output_tokens,
+        "usd": estimate_cost(model, total),
+    }
+
+
+def _start_job(
+    request: Request, kind: str, run: JobRunner, providers: tuple[Any, ...] = ()
+) -> dict[str, str]:
     """Run an AI tool as a background task that survives client navigation.
 
-    The task records live progress and its final result/error in
-    ``app.state.job_results`` so the UI can poll ``GET /api/jobs/{job_id}``.
+    The task records live progress and its final result/error (plus an estimated
+    cost from the providers' token usage) in ``app.state.job_results`` so the UI
+    can poll ``GET /api/jobs/{job_id}``.
     """
     job_id = uuid.uuid4().hex
     registry: dict[str, dict[str, Any]] = request.app.state.job_results
@@ -168,7 +198,9 @@ def _start_job(request: Request, kind: str, run: JobRunner) -> dict[str, str]:
     async def runner() -> None:
         try:
             result = await run(on_progress)
-            registry[job_id]["result"] = result.model_dump()
+            payload = result.model_dump()
+            payload["cost"] = _job_cost(providers)
+            registry[job_id]["result"] = payload
             registry[job_id]["status"] = "done"
         except asyncio.CancelledError:
             registry[job_id]["status"] = "cancelled"
@@ -220,7 +252,7 @@ async def generate_blog_endpoint(request: Request, payload: BlogRequest) -> dict
             on_progress=on_progress,
         )
 
-    return _start_job(request, "blog", run)
+    return _start_job(request, "blog", run, providers=(provider,))
 
 
 @router.post("/summarize")
@@ -238,7 +270,7 @@ async def summarize_endpoint(request: Request, payload: SummarizeRequest) -> dic
             on_progress=on_progress,
         )
 
-    return _start_job(request, "summarize", run)
+    return _start_job(request, "summarize", run, providers=(provider,))
 
 
 def _resolve_video_ids(database: Database, source: str, source_id: str) -> list[str]:
@@ -265,7 +297,7 @@ async def quotes_endpoint(request: Request, payload: QuotesRequest) -> dict[str,
             database, provider, video_ids=video_ids, quote_types=types, on_progress=on_progress
         )
 
-    return _start_job(request, "quotes", run)
+    return _start_job(request, "quotes", run, providers=(provider,))
 
 
 @router.post("/compare")
@@ -278,7 +310,7 @@ async def compare_endpoint(request: Request, payload: CompareRequest) -> dict[st
             database, provider, payload.channel_ids, on_progress=on_progress
         )
 
-    return _start_job(request, "compare", run)
+    return _start_job(request, "compare", run, providers=(provider,))
 
 
 @router.post("/timeline")
@@ -296,7 +328,7 @@ async def timeline_endpoint(request: Request, payload: TimelineRequest) -> dict[
             on_progress=on_progress,
         )
 
-    return _start_job(request, "timeline", run)
+    return _start_job(request, "timeline", run, providers=(provider,))
 
 
 @router.get("/ask/status")
@@ -317,7 +349,7 @@ async def ask_index_endpoint(request: Request, payload: AskIndexRequest) -> dict
             database, embed, payload.channel_id, force=payload.force, on_progress=on_progress
         )
 
-    return _start_job(request, "ask-index", run)
+    return _start_job(request, "ask-index", run, providers=(embed,))
 
 
 @router.post("/ask")
@@ -339,7 +371,7 @@ async def ask_endpoint(request: Request, payload: AskRequest) -> dict[str, str]:
             on_progress=on_progress,
         )
 
-    return _start_job(request, "ask", run)
+    return _start_job(request, "ask", run, providers=(answer, embed))
 
 
 @router.post("/fetch")

@@ -131,6 +131,12 @@ Record non-obvious choices here as they are made.
   the active job id per tool in `localStorage` to reconnect after navigation.
   `app.state.job_tasks` maps job id to the task so `POST /api/jobs/{id}/cancel`
   can cancel it; the runner catches `CancelledError` and records "cancelled".
+- **Cost estimates:** providers accumulate token usage on `self.usage` (a
+  `Usage`) from each completion response; `estimate_cost(model, usage)` prices it
+  against the approximate `_PRICING` table in `core/llm.py`. `api._job_cost`
+  sums usage across a job's providers (skipping local Ollama) and attaches a
+  `cost` dict to the job result; the UI renders it via `formatCost`. Update
+  `_PRICING` when vendor prices change.
 - **Ask agent:** `tools/agent.py` drives a JSON tool loop (no native
   tool-calling): the model returns `{"tool":...}` or `{"answer":...}` as JSON
   (works on every provider via JSON mode), `_Toolbox` runs read-only DB queries,
