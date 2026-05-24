@@ -53,7 +53,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   running even if you navigate to another tool, and the UI shows a live
   progress readout (per-video/per-step) by polling `GET /api/jobs/{id}`.
   Returning to a tool reconnects to its in-flight job, and finished results are
-  retrievable. Tools accept an optional `on_progress` callback.
+  retrievable. Tools accept an optional `on_progress` callback. Each running AI
+  job can be cancelled from the UI (`POST /api/jobs/{id}/cancel`).
 - Fetch retries the bot-check gate with backoff and sleeps briefly between
   yt-dlp requests, recovering most intermittent failures without setup.
 - The default fetch concurrency dropped from 3 to 2 parallel videos to reduce

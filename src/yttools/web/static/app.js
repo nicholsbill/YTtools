@@ -266,6 +266,7 @@ function blogPanel() {
     running: false,
     error: "",
     progress: "",
+    jobId: null,
     markdown: "",
     rendered: "",
     modelUsed: "",
@@ -329,6 +330,8 @@ function formatProgress(progress) {
   return total ? `${message} (${current}/${total})` : message || "";
 }
 
+// Poll a job to completion. Resolves with the result on "done", resolves with
+// null on "cancelled", rejects on "error" or if the job disappears.
 function pollJob(tool, jobId, onProgress) {
   return new Promise((resolve, reject) => {
     const timer = setInterval(async () => {
@@ -346,20 +349,17 @@ function pollJob(tool, jobId, onProgress) {
         return; // transient; try again on the next tick
       }
       if (onProgress) onProgress(entry.progress);
-      if (entry.status === "done") {
-        clearInterval(timer);
-        localStorage.removeItem(jobKey(tool));
-        resolve(entry.result);
-      } else if (entry.status === "error") {
-        clearInterval(timer);
-        localStorage.removeItem(jobKey(tool));
-        reject(new Error(entry.detail || "The job failed."));
-      }
+      if (entry.status === "running") return;
+      clearInterval(timer);
+      localStorage.removeItem(jobKey(tool));
+      if (entry.status === "done") resolve(entry.result);
+      else if (entry.status === "cancelled") resolve(null);
+      else reject(new Error(entry.detail || "The job failed."));
     }, 800);
   });
 }
 
-async function startJob(tool, startUrl, body, onProgress) {
+async function beginJob(tool, startUrl, body) {
   const response = await fetch(startUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -368,50 +368,60 @@ async function startJob(tool, startUrl, body, onProgress) {
   if (!response.ok) throw new Error((await response.json()).detail || "Could not start the job.");
   const { job_id: jobId } = await response.json();
   localStorage.setItem(jobKey(tool), jobId);
-  return pollJob(tool, jobId, onProgress);
+  return jobId;
 }
 
-async function resumeJob(tool, onProgress) {
-  const jobId = localStorage.getItem(jobKey(tool));
-  if (!jobId) return null;
+async function cancelJob(jobId) {
+  if (!jobId) return;
   try {
-    const response = await fetch(`/api/jobs/${jobId}`);
-    if (!response.ok) {
-      localStorage.removeItem(jobKey(tool));
-      return null;
-    }
+    await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
   } catch (_) {
-    return null;
+    /* the poll will reflect the final state */
   }
-  return pollJob(tool, jobId, onProgress);
 }
 
-// Drive a panel's running/progress/error state through a job, applying the
-// result on success. `self` is the Alpine component; `apply(result)` renders it.
+// Drive a panel's running/progress/error/jobId state through a job, applying
+// the result on success. `self` is the Alpine component; `apply(result)`
+// renders it. A null result means the job was cancelled.
 async function runInto(self, tool, url, body, apply) {
   self.error = "";
   self.running = true;
   self.progress = "Starting";
   try {
-    apply(await startJob(tool, url, body, (p) => (self.progress = formatProgress(p))));
-  } catch (e) {
-    self.error = e.message;
-  } finally {
-    self.running = false;
-  }
-}
-
-async function resumeInto(self, tool, apply) {
-  if (!localStorage.getItem(jobKey(tool))) return;
-  self.error = "";
-  self.running = true;
-  try {
-    const result = await resumeJob(tool, (p) => (self.progress = formatProgress(p)));
+    self.jobId = await beginJob(tool, url, body);
+    const result = await pollJob(tool, self.jobId, (p) => (self.progress = formatProgress(p)));
     if (result) apply(result);
   } catch (e) {
     self.error = e.message;
   } finally {
     self.running = false;
+    self.jobId = null;
+  }
+}
+
+async function resumeInto(self, tool, apply) {
+  const jobId = localStorage.getItem(jobKey(tool));
+  if (!jobId) return;
+  try {
+    const response = await fetch(`/api/jobs/${jobId}`); // a restart clears the registry
+    if (!response.ok) {
+      localStorage.removeItem(jobKey(tool));
+      return;
+    }
+  } catch (_) {
+    return;
+  }
+  self.error = "";
+  self.running = true;
+  self.jobId = jobId;
+  try {
+    const result = await pollJob(tool, jobId, (p) => (self.progress = formatProgress(p)));
+    if (result) apply(result);
+  } catch (e) {
+    self.error = e.message;
+  } finally {
+    self.running = false;
+    self.jobId = null;
   }
 }
 
@@ -425,6 +435,7 @@ function summarizePanel() {
     running: false,
     error: "",
     progress: "",
+    jobId: null,
     sections: [],
     render: renderMarkdown,
     async loadChannels() {
@@ -492,6 +503,7 @@ function quotesPanel() {
     running: false,
     error: "",
     progress: "",
+    jobId: null,
     quotes: [],
     filterType: "",
     clock,
@@ -546,6 +558,7 @@ function comparePanel() {
     running: false,
     error: "",
     progress: "",
+    jobId: null,
     result: null,
     tab: "Topic overlap",
     tabs: ["Topic overlap", "Vocabulary", "Timing"],
@@ -592,6 +605,7 @@ function timelinePanel() {
     running: false,
     error: "",
     progress: "",
+    jobId: null,
     stats: [],
     hasData: false,
     async loadChannels() {
@@ -657,6 +671,7 @@ function askPanel() {
     asking: false,
     error: "",
     progress: "",
+    jobId: null,
     question: "",
     answer: "",
     rendered: "",
@@ -670,15 +685,18 @@ function askPanel() {
       }
       await this.refreshStatus();
       // Reconnect to an indexing job still running after navigating away.
-      if (localStorage.getItem(jobKey("ask-index"))) {
+      const indexJob = localStorage.getItem(jobKey("ask-index"));
+      if (indexJob) {
         this.indexing = true;
+        this.jobId = indexJob;
         try {
-          await resumeJob("ask-index", (p) => (this.progress = formatProgress(p)));
+          await pollJob("ask-index", indexJob, (p) => (this.progress = formatProgress(p)));
           await this.refreshStatus();
         } catch (e) {
           this.error = e.message;
         } finally {
           this.indexing = false;
+          this.jobId = null;
         }
       }
     },
@@ -696,17 +714,14 @@ function askPanel() {
       this.indexing = true;
       this.progress = "Starting";
       try {
-        await startJob(
-          "ask-index",
-          "/api/ask/index",
-          { channel_id: this.channelId },
-          (p) => (this.progress = formatProgress(p))
-        );
+        this.jobId = await beginJob("ask-index", "/api/ask/index", { channel_id: this.channelId });
+        await pollJob("ask-index", this.jobId, (p) => (this.progress = formatProgress(p)));
         await this.refreshStatus();
       } catch (e) {
         this.error = e.message;
       } finally {
         this.indexing = false;
+        this.jobId = null;
       }
     },
     async ask() {
@@ -719,14 +734,18 @@ function askPanel() {
       try {
         const body = { question: this.question };
         if (this.channelId) body.channel_ids = [this.channelId];
-        const data = await startJob("ask", "/api/ask", body, (p) => (this.progress = formatProgress(p)));
-        this.answer = data.answer;
-        this.rendered = renderMarkdown(data.answer);
-        this.citations = data.citations;
+        this.jobId = await beginJob("ask", "/api/ask", body);
+        const data = await pollJob("ask", this.jobId, (p) => (this.progress = formatProgress(p)));
+        if (data) {
+          this.answer = data.answer;
+          this.rendered = renderMarkdown(data.answer);
+          this.citations = data.citations;
+        }
       } catch (e) {
         this.error = e.message;
       } finally {
         this.asking = false;
+        this.jobId = null;
       }
     },
   };

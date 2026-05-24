@@ -52,6 +52,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.tasks = set()
         # Background AI-tool jobs: job_id -> {status, progress, result, detail}.
         app.state.job_results = {}
+        # job_id -> asyncio.Task, so a running job can be cancelled.
+        app.state.job_tasks = {}
         try:
             yield
         finally:

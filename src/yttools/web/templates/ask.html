@@ -37,6 +37,10 @@
               class="rounded bg-accent px-4 py-2 text-white text-sm font-medium disabled:opacity-50">
         <span x-text="asking ? 'Thinking…' : 'Ask'"></span>
       </button>
+      <button type="button" x-show="indexing || asking" @click="cancelJob(jobId)"
+              class="rounded border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm">
+        Cancel
+      </button>
     </div>
     <span x-show="(indexing || asking) && progress" class="text-sm text-zinc-500" x-text="progress"></span>
     <span x-show="error" class="text-sm text-accent" x-text="error"></span>

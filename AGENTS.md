@@ -129,6 +129,8 @@ Record non-obvious choices here as they are made.
   `on_progress: ProgressCallback` (`core/progress.report` is the no-op-safe
   caller); the CLI passes `None`, so it stays synchronous. The browser remembers
   the active job id per tool in `localStorage` to reconnect after navigation.
+  `app.state.job_tasks` maps job id to the task so `POST /api/jobs/{id}/cancel`
+  can cancel it; the runner catches `CancelledError` and records "cancelled".
 - **`--ignore-no-formats-error`:** the metadata and caption calls pass this flag.
   Even with `--skip-download`, yt-dlp runs media format selection, and for some
   videos/clients it aborts with "Requested format is not available". We only

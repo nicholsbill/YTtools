@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -329,6 +330,42 @@ def test_ask_without_index_errors(client: TestClient, monkeypatch: pytest.Monkey
     monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("x"))
     entry = _run_job(client, "/api/ask", {"question": "q", "channel_ids": ["UC_x"]})
     assert entry["status"] == "error"
+
+
+def test_cancel_unknown_job_returns_404(client: TestClient) -> None:
+    assert client.post("/api/jobs/nope/cancel").status_code == 404
+
+
+def test_cancel_running_job(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed(client)
+
+    class _BlockingProvider:
+        name = "fake"
+        default_model = "m"
+
+        async def complete(self, prompt: str, **kwargs: object) -> str:
+            await asyncio.Event().wait()  # never resolves until cancelled
+            return "{}"
+
+    monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _BlockingProvider())
+    job_id = client.post("/api/blog", json={"video_id": "vid00000001"}).json()["job_id"]
+
+    # Wait until the job is blocked inside the model call, then cancel it.
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        progress = client.get(f"/api/jobs/{job_id}").json()["progress"]
+        if progress["message"] == "Generating the article":
+            break
+        time.sleep(0.02)
+    assert client.post(f"/api/jobs/{job_id}/cancel").status_code == 200
+
+    entry: dict[str, Any] = {}
+    while time.time() < deadline:
+        entry = client.get(f"/api/jobs/{job_id}").json()
+        if entry["status"] != "running":
+            break
+        time.sleep(0.02)
+    assert entry["status"] == "cancelled"
 
 
 def test_start_fetch_returns_job_id(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

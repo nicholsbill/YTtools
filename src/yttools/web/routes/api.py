@@ -169,12 +169,19 @@ def _start_job(request: Request, kind: str, run: JobRunner) -> dict[str, str]:
             result = await run(on_progress)
             registry[job_id]["result"] = result.model_dump()
             registry[job_id]["status"] = "done"
+        except asyncio.CancelledError:
+            registry[job_id]["status"] = "cancelled"
+            registry[job_id]["detail"] = "Cancelled"
+            raise
         except Exception as error:  # job boundary: report any failure to the UI
             registry[job_id]["detail"] = str(error)
             registry[job_id]["status"] = "error"
+        finally:
+            request.app.state.job_tasks.pop(job_id, None)
 
     task = asyncio.ensure_future(runner())
     request.app.state.tasks.add(task)
+    request.app.state.job_tasks[job_id] = task
     task.add_done_callback(request.app.state.tasks.discard)
     return {"job_id": job_id}
 
@@ -185,6 +192,15 @@ async def job_result(request: Request, job_id: str) -> dict[str, Any]:
     if entry is None:
         raise HTTPException(status_code=404, detail="Unknown job")
     return dict(entry)
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(request: Request, job_id: str) -> dict[str, bool]:
+    task = request.app.state.job_tasks.get(job_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="No such active job")
+    task.cancel()
+    return {"cancelled": True}
 
 
 @router.post("/blog")
