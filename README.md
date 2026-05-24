@@ -53,6 +53,62 @@ yttools search "machine learning" --limit 20
 yttools serve
 ```
 
+## YouTube cookies (when fetch is blocked)
+
+YouTube sometimes answers an unauthenticated request with `Sign in to confirm
+you're not a bot`. Fetch already retries the gated request with a short backoff
+and pauses briefly between requests, which clears most intermittent cases. If it
+keeps happening, give YTtools cookies so its requests are authenticated. You can
+set this on the **Settings** page under "YouTube fetching", or from the CLI.
+
+There are two ways to supply cookies. If you set both, the browser source wins.
+
+### Option A — read cookies from your browser
+
+Point YTtools at a browser you are already logged into YouTube with. Nothing to
+export; yt-dlp reads the cookies directly.
+
+```bash
+yttools config set youtube.cookies_from_browser firefox
+```
+
+Supported values: `chrome`, `chromium`, `firefox`, `safari`, `brave`, `edge`,
+`opera`, `vivaldi`. Notes:
+
+- Firefox tends to be the most reliable. Recent Chrome versions encrypt cookies
+  in a way that can block extraction, and on macOS Chrome may need to be fully
+  quit (it locks its cookie database while running).
+- The browser must have an active, logged-in YouTube session.
+
+### Option B — use an exported cookies.txt file
+
+Export your YouTube cookies once to a Netscape-format `cookies.txt`, then point
+YTtools at the file.
+
+1. Install a "cookies.txt" exporter browser extension (search your browser's
+   add-on store for one that exports the Netscape format).
+2. Log into YouTube, then use the extension to export cookies for
+   `youtube.com` to a file, for example `~/.yttools/cookies.txt`.
+3. Tell YTtools where it is:
+
+   ```bash
+   yttools config set youtube.cookies_file ~/.yttools/cookies.txt
+   ```
+
+A `cookies.txt` holds your logged-in YouTube session. Treat it like a password:
+keep it outside any repository and do not share it. Cookies expire, so re-export
+the file if the bot check returns.
+
+### Tuning
+
+```bash
+# Seconds yt-dlp waits between requests (default 1.0; set 0 to disable)
+yttools config set youtube.sleep_requests 1.5
+
+# Parallel downloads (default 2; lower values are less likely to be flagged)
+yttools config set fetch.concurrent_videos 1
+```
+
 ## AI features
 
 The AI-backed tools default to a local Ollama model, so they work offline with no account. If you prefer a hosted model, three hosted providers are supported: add an API key on the Settings page or via the matching environment variable. Keys resolve in this order: config file value, then environment variable. Without a key, that provider stays disabled. See [docs/llm-providers.md](./docs/llm-providers.md) for the list of supported providers and their models.
