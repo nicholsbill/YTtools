@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %} — Timeline{% endblock %}
+{% block content %}
+<div x-data="timelinePanel()" x-init="loadChannels()" class="max-w-5xl space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold mb-1">Timeline</h1>
+    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+      See when topics rose and fell across a channel. Auto-discover the top topics,
+      or track specific ones you name.
+    </p>
+  </div>
+
+  <form @submit.prevent="run()" class="space-y-3">
+    <div class="flex flex-wrap gap-4 text-sm items-end">
+      <label class="flex flex-col gap-1 flex-1 min-w-64">
+        <span class="text-zinc-500 dark:text-zinc-400">Channel</span>
+        <select x-model="channelId"
+                class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+          <option value="">Select a channel…</option>
+          <template x-for="c in channels" :key="c.id">
+            <option :value="c.id" x-text="c.title"></option>
+          </template>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">Mode</span>
+        <select x-model="mode"
+                class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+          <option value="auto">Auto-discover</option>
+          <option value="specific">Track specific</option>
+        </select>
+      </label>
+    </div>
+    <label x-show="mode === 'specific'" class="flex flex-col gap-1 text-sm">
+      <span class="text-zinc-500 dark:text-zinc-400">Topics (comma-separated, up to 10)</span>
+      <input type="text" x-model="topicsText" placeholder="rust, web assembly, async"
+             class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+    </label>
+    <div class="flex items-center gap-3">
+      <button type="submit" :disabled="!channelId || running"
+              class="rounded bg-accent px-4 py-2 text-white text-sm font-medium disabled:opacity-50">
+        <span x-text="running ? 'Building…' : 'Build timeline'"></span>
+      </button>
+      <span x-show="error" class="text-sm text-accent" x-text="error"></span>
+    </div>
+  </form>
+
+  <div x-show="hasData">
+    <canvas x-ref="chart" height="120"></canvas>
+    <table class="w-full text-sm border-collapse mt-4">
+      <thead class="text-left text-xs text-zinc-400">
+        <tr><th class="py-1 pr-2">Topic</th><th class="py-1 pr-2">Videos</th><th class="py-1 pr-2">First</th><th class="py-1 pr-2">Peak</th><th class="py-1">Last</th></tr>
+      </thead>
+      <tbody>
+        <template x-for="(s, i) in stats" :key="i">
+          <tr class="border-t border-zinc-200 dark:border-zinc-800">
+            <td class="py-1 pr-2" x-text="s.topic"></td>
+            <td class="py-1 pr-2" x-text="s.total"></td>
+            <td class="py-1 pr-2 font-mono text-xs" x-text="s.first_month"></td>
+            <td class="py-1 pr-2 font-mono text-xs" x-text="s.peak_month"></td>
+            <td class="py-1 font-mono text-xs" x-text="s.last_month"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -271,6 +271,65 @@ def quotes(
         typer.echo(body)
 
 
+@app.command()
+def compare(
+    channel_ids: list[str] = typer.Argument(..., help="2-5 channel ids to compare."),
+) -> None:
+    """Compare channels by shared/unique topics and distinctive vocabulary."""
+    from yttools.core.llm import get_provider
+    from yttools.tools.compare import CompareError, compare_channels
+
+    settings = load_settings()
+    provider = get_provider(settings)
+    database = _open_db()
+    try:
+        result = asyncio.run(compare_channels(database, provider, channel_ids))
+    except CompareError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        database.close()
+
+    typer.echo("Shared topics:")
+    for shared in result.shared_topics:
+        typer.echo(f"  {shared.label} — {', '.join(shared.channels)}")
+    typer.echo("\nDistinctive vocabulary:")
+    for channel in result.channels:
+        terms = ", ".join(t.term for t in result.vocabulary.get(channel.id, [])[:10])
+        typer.echo(f"  {channel.title}: {terms}")
+
+
+@app.command()
+def timeline(
+    channel_id: str = typer.Argument(..., help="Channel id."),
+    mode: str = typer.Option("auto", "--mode", help="auto or specific."),
+    topics: list[str] = typer.Option([], "--topic", help="Topics to track (specific mode)."),
+) -> None:
+    """Show when topics rose and fell across a channel."""
+    from yttools.core.llm import get_provider
+    from yttools.tools.timeline import TimelineError, build_timeline
+
+    settings = load_settings()
+    provider = get_provider(settings)
+    database = _open_db()
+    try:
+        result = asyncio.run(
+            build_timeline(database, provider, channel_id, mode=mode, topics=topics)
+        )
+    except TimelineError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        database.close()
+
+    typer.echo(f"{len(result.stats)} topic(s) across {len(result.months)} month(s)")
+    for stat in result.stats[:20]:
+        typer.echo(
+            f"  {stat.topic}: {stat.total} video(s) "
+            f"({stat.first_month} -> {stat.last_month}, peak {stat.peak_month})"
+        )
+
+
 @app.command("list")
 def list_items(
     kind: str = typer.Argument(..., help="channels, playlists, or videos."),

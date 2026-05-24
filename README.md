@@ -21,7 +21,7 @@ Eight tools share one local storage layer (SQLite):
 - **Blog** — convert a single video into a structured Markdown article with timestamp citations.
 - **Ask** — local retrieval-augmented question answering over a channel, with cited answers.
 
-Fetch, Search, Summarize, Quotes, and Blog work today. Compare, Timeline, and Ask land in a later release (see the roadmap).
+Fetch, Search, Summarize, Compare, Quotes, Timeline, and Blog work today. Ask (local RAG) lands in a later release (see the roadmap).
 
 ## Why local-first
 

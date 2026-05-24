@@ -18,7 +18,9 @@ Layering, from the bottom up:
   abstraction (`llm.py`), and embedding helpers (`embeddings.py`).
 - `tools/` — one module per user-facing tool. Tools depend on `core/`, never the
   reverse. Shipped so far: `fetch.py`, `search.py`, `blog.py`, `summarize.py`,
-  and `quotes.py`; Compare, Timeline, and Ask are added in later releases.
+  `quotes.py`, `compare.py`, and `timeline.py`; Ask is added in a later release.
+  Compare and Timeline reuse `summarize.ensure_channel_topics` to populate the
+  topic tables on first use.
 - `web/` — the FastAPI app factory, route handlers (`routes/`), Jinja2 templates,
   and static assets.
 - `cli.py` — Typer commands, one per tool plus `serve`, `config`, `db`, `version`.

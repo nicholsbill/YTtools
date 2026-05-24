@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %} — Compare{% endblock %}
+{% block content %}
+<div x-data="comparePanel()" x-init="loadChannels()" class="max-w-5xl space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold mb-1">Compare</h1>
+    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+      Compare 2-5 channels: shared and unique topics, distinctive vocabulary, and
+      when each channel covered shared topics. Topics are extracted on first use.
+    </p>
+  </div>
+
+  <form @submit.prevent="run()" class="space-y-3">
+    <label class="flex flex-col gap-1 text-sm">
+      <span class="text-zinc-500 dark:text-zinc-400">Channels (pick 2-5)</span>
+      <select multiple x-model="channelIds"
+              class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 h-32">
+        <template x-for="c in channels" :key="c.id">
+          <option :value="c.id" x-text="c.title"></option>
+        </template>
+      </select>
+    </label>
+    <div class="flex items-center gap-3">
+      <button type="submit" :disabled="channelIds.length < 2 || running"
+              class="rounded bg-accent px-4 py-2 text-white text-sm font-medium disabled:opacity-50">
+        <span x-text="running ? 'Comparing…' : 'Compare'"></span>
+      </button>
+      <span x-show="error" class="text-sm text-accent" x-text="error"></span>
+    </div>
+  </form>
+
+  <div x-show="result" class="space-y-6">
+    <div class="flex gap-2 text-sm border-b border-zinc-200 dark:border-zinc-800">
+      <template x-for="t in tabs" :key="t">
+        <button class="px-3 py-2 -mb-px border-b-2"
+                :class="tab === t ? 'border-accent text-accent' : 'border-transparent text-zinc-500'"
+                @click="tab = t" x-text="t"></button>
+      </template>
+    </div>
+
+    <div x-show="tab === 'Topic overlap'" class="space-y-3 text-sm">
+      <div>
+        <div class="font-medium mb-1">Shared topics</div>
+        <ul class="space-y-1">
+          <template x-for="s in result.shared_topics" :key="s.label">
+            <li><span class="font-medium" x-text="s.label"></span>
+              <span class="text-zinc-500" x-text="' — ' + s.channels.map(titleOf).join(', ')"></span></li>
+          </template>
+          <li x-show="!result.shared_topics.length" class="text-zinc-500">No shared topics.</li>
+        </ul>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <template x-for="ch in result.channels" :key="ch.id">
+          <div class="border border-zinc-200 dark:border-zinc-800 rounded p-3">
+            <div class="font-medium mb-1" x-text="ch.title + ' — unique'"></div>
+            <ul class="text-xs text-zinc-500 space-y-0.5">
+              <template x-for="l in (result.unique_topics[ch.id] || [])" :key="l"><li x-text="l"></li></template>
+            </ul>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div x-show="tab === 'Vocabulary'" class="grid grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+      <template x-for="ch in result.channels" :key="ch.id">
+        <div class="border border-zinc-200 dark:border-zinc-800 rounded p-3">
+          <div class="font-medium mb-1" x-text="ch.title"></div>
+          <div class="flex flex-wrap gap-1">
+            <template x-for="t in (result.vocabulary[ch.id] || [])" :key="t.term">
+              <span class="rounded bg-zinc-200 dark:bg-zinc-800 px-1.5 py-0.5 text-xs" x-text="t.term"></span>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div x-show="tab === 'Timing'" class="text-sm">
+      <table class="w-full border-collapse">
+        <thead class="text-left text-xs text-zinc-400">
+          <tr><th class="py-1 pr-2">Topic</th><th class="py-1 pr-2">Channel</th><th class="py-1 pr-2">First</th><th class="py-1 pr-2">Last</th><th class="py-1">Videos</th></tr>
+        </thead>
+        <tbody>
+          <template x-for="(row, i) in result.timing" :key="i">
+            <tr class="border-t border-zinc-200 dark:border-zinc-800">
+              <td class="py-1 pr-2" x-text="row.label"></td>
+              <td class="py-1 pr-2 text-zinc-500" x-text="titleOf(row.channel_id)"></td>
+              <td class="py-1 pr-2 font-mono text-xs" x-text="(row.first || '').slice(0,10)"></td>
+              <td class="py-1 pr-2 font-mono text-xs" x-text="(row.last || '').slice(0,10)"></td>
+              <td class="py-1" x-text="row.count"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -19,9 +19,9 @@ NAV_ITEMS: list[dict[str, Any]] = [
     {"key": "fetch", "label": "Fetch", "href": "/fetch", "enabled": True},
     {"key": "search", "label": "Search", "href": "/search", "enabled": True},
     {"key": "summarize", "label": "Summarize", "href": "/summarize", "enabled": True},
-    {"key": "compare", "label": "Compare", "href": "#", "enabled": False},
+    {"key": "compare", "label": "Compare", "href": "/compare", "enabled": True},
     {"key": "quotes", "label": "Quotes", "href": "/quotes", "enabled": True},
-    {"key": "timeline", "label": "Timeline", "href": "#", "enabled": False},
+    {"key": "timeline", "label": "Timeline", "href": "/timeline", "enabled": True},
     {"key": "blog", "label": "Blog", "href": "/blog", "enabled": True},
     {"key": "ask", "label": "Ask", "href": "#", "enabled": False},
 ]
@@ -82,6 +82,16 @@ async def summarize_page(request: Request) -> HTMLResponse:
 @router.get("/quotes", response_class=HTMLResponse)
 async def quotes_page(request: Request) -> HTMLResponse:
     return _render(request, "quotes.html", "quotes")
+
+
+@router.get("/compare", response_class=HTMLResponse)
+async def compare_page(request: Request) -> HTMLResponse:
+    return _render(request, "compare.html", "compare")
+
+
+@router.get("/timeline", response_class=HTMLResponse)
+async def timeline_page(request: Request) -> HTMLResponse:
+    return _render(request, "timeline.html", "timeline")
 
 
 @router.get("/settings", response_class=HTMLResponse)

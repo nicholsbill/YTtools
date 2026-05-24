@@ -22,10 +22,12 @@ from yttools.core import exports
 from yttools.core.db import Database
 from yttools.core.llm import build_provider, build_providers, get_provider
 from yttools.tools.blog import BlogError, BlogLength, generate_blog
+from yttools.tools.compare import CompareError, compare_channels
 from yttools.tools.fetch import FetchConfig, FetchJob, youtube_options_from_settings
 from yttools.tools.quotes import QuotesError, extract_quotes, load_quotes
 from yttools.tools.search import SearchError, SearchFilters, search
 from yttools.tools.summarize import SummarizeError, summarize_channel
+from yttools.tools.timeline import TimelineError, build_timeline
 
 router = APIRouter(prefix="/api")
 
@@ -55,6 +57,16 @@ class QuotesRequest(BaseModel):
     id: str
     quote_types: list[str] = Field(default_factory=list)
     regenerate: bool = False
+
+
+class CompareRequest(BaseModel):
+    channel_ids: list[str] = Field(default_factory=list)
+
+
+class TimelineRequest(BaseModel):
+    channel_id: str
+    mode: str = "auto"  # "auto" or "specific"
+    topics: list[str] = Field(default_factory=list)
 
 
 class ProviderSettingUpdate(BaseModel):
@@ -173,6 +185,32 @@ async def quotes_endpoint(request: Request, payload: QuotesRequest) -> dict[str,
                 return existing.model_dump()
         result = await extract_quotes(database, provider, video_ids=video_ids, quote_types=types)
     except (QuotesError, NotImplementedError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return result.model_dump()
+
+
+@router.post("/compare")
+async def compare_endpoint(request: Request, payload: CompareRequest) -> dict[str, Any]:
+    provider = get_provider(request.app.state.settings)
+    try:
+        result = await compare_channels(_db(request), provider, payload.channel_ids)
+    except (CompareError, NotImplementedError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return result.model_dump()
+
+
+@router.post("/timeline")
+async def timeline_endpoint(request: Request, payload: TimelineRequest) -> dict[str, Any]:
+    provider = get_provider(request.app.state.settings)
+    try:
+        result = await build_timeline(
+            _db(request),
+            provider,
+            payload.channel_id,
+            mode=payload.mode,
+            topics=payload.topics,
+        )
+    except (TimelineError, NotImplementedError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return result.model_dump()
 

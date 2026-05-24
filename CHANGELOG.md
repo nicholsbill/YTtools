@@ -26,6 +26,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from a channel or single video, de-duplicated and timestamp-linked, with CSV,
   JSON, and Markdown export. Web (`/quotes`), API (`POST /api/quotes`), and CLI
   (`yttools quotes`).
+- Compare tool: compare 2-5 channels by shared/unique topics (fuzzy-aligned),
+  distinctive vocabulary (TF-IDF across channel corpora), and when each channel
+  covered shared topics. Reuses persisted topics, auto-extracting them if
+  missing. Web (`/compare`), API (`POST /api/compare`), CLI (`yttools compare`).
+- Timeline tool: topic-over-time view for a channel, either auto-discovered from
+  the topic tables or tracking free-text topics matched against transcripts.
+  Renders a stacked-area chart (Chart.js) plus per-topic timing stats. Web
+  (`/timeline`), API (`POST /api/timeline`), CLI (`yttools timeline`).
 - Settings page highlights the active model provider with an "Active" badge.
 - Fetch can authenticate to YouTube with cookies to clear the "sign in to
   confirm you're not a bot" gate. Configure `youtube.cookies_from_browser` or

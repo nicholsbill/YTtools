@@ -103,7 +103,32 @@ yttools quotes VIDEO_ID --video --regenerate
 - Each quote links to its timestamp; near-duplicates are merged.
 - Export as CSV, JSON, or Markdown (web and CLI).
 
+## Compare
+
+Compare how 2-5 channels cover overlapping ground.
+
+```bash
+yttools compare UC_channel_a UC_channel_b UC_channel_c
+```
+
+- Shared vs. unique topics (topics are extracted on first use), distinctive
+  vocabulary per channel (TF-IDF), and when each channel covered shared topics.
+- The web view (`/compare`) tabs between topic overlap, vocabulary, and timing.
+
+## Timeline
+
+See when topics rose and fell across a channel.
+
+```bash
+yttools timeline CHANNEL_ID                          # auto-discover top topics
+yttools timeline CHANNEL_ID --mode specific --topic rust --topic "web assembly"
+```
+
+- Auto mode aggregates the topic tables by month; specific mode matches the
+  named topics against transcripts.
+- The web view (`/timeline`) renders a stacked-area chart plus a stats table.
+
 ## Planned
 
-- **Compare, Timeline, Ask** (v0.3.0): cross-channel comparison, topic timelines,
-  and retrieval-augmented question answering over a channel.
+- **Ask** (v0.3.0): retrieval-augmented question answering over a channel, with
+  cited answers that deep-link to the source moments.

@@ -473,3 +473,128 @@ function quotesPanel() {
     },
   };
 }
+
+function comparePanel() {
+  return {
+    channels: [],
+    channelIds: [],
+    running: false,
+    error: "",
+    result: null,
+    tab: "Topic overlap",
+    tabs: ["Topic overlap", "Vocabulary", "Timing"],
+    async loadChannels() {
+      try {
+        this.channels = await (await fetch("/api/channels")).json();
+      } catch (_) {
+        this.channels = [];
+      }
+    },
+    titleOf(id) {
+      const known = this.channels.find((c) => c.id === id);
+      if (known) return known.title;
+      const fromResult = this.result && this.result.channels.find((c) => c.id === id);
+      return fromResult ? fromResult.title : id;
+    },
+    async run() {
+      if (this.channelIds.length < 2) return;
+      this.error = "";
+      this.running = true;
+      this.result = null;
+      try {
+        const response = await fetch("/api/compare", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channel_ids: this.channelIds }),
+        });
+        if (!response.ok) {
+          this.error = (await response.json()).detail || "Failed.";
+          return;
+        }
+        this.result = await response.json();
+        this.tab = "Topic overlap";
+      } catch (_) {
+        this.error = "Could not reach the server.";
+      } finally {
+        this.running = false;
+      }
+    },
+  };
+}
+
+const TIMELINE_PALETTE = [
+  "#ef4444", "#3b82f6", "#10b981", "#f59e0b",
+  "#8b5cf6", "#ec4899", "#14b8a6", "#f97316",
+];
+
+function timelinePanel() {
+  let chart = null; // kept out of Alpine's reactive graph
+  return {
+    channels: [],
+    channelId: "",
+    mode: "auto",
+    topicsText: "",
+    running: false,
+    error: "",
+    stats: [],
+    hasData: false,
+    async loadChannels() {
+      try {
+        this.channels = await (await fetch("/api/channels")).json();
+      } catch (_) {
+        this.channels = [];
+      }
+    },
+    async run() {
+      if (!this.channelId) return;
+      this.error = "";
+      this.running = true;
+      this.hasData = false;
+      const topics = this.topicsText.split(",").map((s) => s.trim()).filter(Boolean);
+      try {
+        const response = await fetch("/api/timeline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channel_id: this.channelId, mode: this.mode, topics }),
+        });
+        if (!response.ok) {
+          this.error = (await response.json()).detail || "Failed.";
+          return;
+        }
+        const data = await response.json();
+        this.stats = data.stats;
+        if (!data.months.length) {
+          this.error = "No data for that selection.";
+          return;
+        }
+        this.hasData = true;
+        this.$nextTick(() => this.draw(data));
+      } catch (_) {
+        this.error = "Could not reach the server.";
+      } finally {
+        this.running = false;
+      }
+    },
+    draw(data) {
+      if (!window.Chart) return;
+      if (chart) chart.destroy();
+      const datasets = data.series.map((s, i) => ({
+        label: s.topic,
+        data: s.counts,
+        backgroundColor: TIMELINE_PALETTE[i % TIMELINE_PALETTE.length],
+        borderColor: TIMELINE_PALETTE[i % TIMELINE_PALETTE.length],
+        fill: true,
+      }));
+      chart = new Chart(this.$refs.chart, {
+        type: "line",
+        data: { labels: data.months, datasets },
+        options: {
+          responsive: true,
+          scales: { y: { stacked: true, beginAtZero: true }, x: { stacked: true } },
+          elements: { line: { tension: 0.3 } },
+          plugins: { legend: { labels: { boxWidth: 10 } } },
+        },
+      });
+    },
+  };
+}

@@ -284,6 +284,26 @@ async def _guests(
     return "\n".join(lines) + "\n"
 
 
+async def ensure_channel_topics(
+    database: Database,
+    provider: LLMProvider,
+    channel_id: str,
+    *,
+    model: str | None = None,
+    force: bool = False,
+) -> None:
+    """Extract and persist topics for a channel if it has none yet.
+
+    Compare and Timeline call this so they never depend on the user having run
+    Summarize first.
+    """
+    if not force and database.list_topics(channel_id):
+        return
+    videos = database.list_videos(channel_id)
+    if videos:
+        await _topics(database, channel_id, videos, provider, model)
+
+
 # -- orchestration -------------------------------------------------------
 
 

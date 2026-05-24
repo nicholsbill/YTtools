@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -221,6 +222,48 @@ def test_quotes_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) ->
     data = response.json()
     assert data["total"] == 1
     assert "watch?v=vid00000001&t=12s" in data["quotes"][0]["url"]
+
+
+def test_compare_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    database: Database = client.app.state.db
+    for cid, title, text in [
+        ("UC_a", "Alpha", "neural networks and deep learning models"),
+        ("UC_b", "Beta", "recipes and cooking and baking in the kitchen"),
+    ]:
+        database.upsert_channel(Channel(id=cid, title=title))
+        database.upsert_video(Video(id=f"{cid}_v", channel_id=cid, title=title))
+        database.upsert_transcript(
+            Transcript(video_id=f"{cid}_v", language="en", is_auto_generated=True, text=text)
+        )
+    monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("{}"))
+    response = client.post("/api/compare", json={"channel_ids": ["UC_a", "UC_b"]})
+    assert response.status_code == 200
+    assert len(response.json()["channels"]) == 2
+
+
+def test_timeline_specific_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    database: Database = client.app.state.db
+    database.upsert_channel(Channel(id="UC_t", title="T"))
+    database.upsert_video(
+        Video(id="vt1", channel_id="UC_t", title="t", published_at=datetime(2024, 3, 1, tzinfo=UTC))
+    )
+    database.upsert_transcript(
+        Transcript(
+            video_id="vt1",
+            language="en",
+            is_auto_generated=True,
+            text="we explore machine learning here",
+        )
+    )
+    monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("{}"))
+    response = client.post(
+        "/api/timeline",
+        json={"channel_id": "UC_t", "mode": "specific", "topics": ["machine learning"]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mode"] == "specific"
+    assert "2024-03" in data["months"]
 
 
 def test_start_fetch_returns_job_id(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
