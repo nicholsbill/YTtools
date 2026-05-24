@@ -45,6 +45,8 @@ function formatCost(cost) {
 }
 
 // Convert the markdown-style **bold** match markers into highlighted spans.
+// SECURITY: the snippet is escaped FIRST, so the only live markup added is our
+// own <mark> tag — keep the escape before any markup when editing (x-html sink).
 function renderSnippet(snippet) {
   const escaped = escapeHtml(snippet);
   return escaped.replace(/\*\*(.+?)\*\*/g, '<mark class="bg-accent/30 rounded px-0.5">$1</mark>');
@@ -186,6 +188,8 @@ function searchPanel() {
       }
     },
     highlight(text) {
+      // SECURITY: transcript text is escaped FIRST (it feeds an x-html sink);
+      // only our own <mark> tags are added afterwards. Keep this ordering.
       const escaped = escapeHtml(text);
       const terms = this.query.replace(/["*()]/g, " ").split(/\s+/)
         .filter((t) => t && !["AND", "OR", "NOT", "NEAR"].includes(t));
