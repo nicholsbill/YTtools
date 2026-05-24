@@ -45,14 +45,21 @@
         <div class="grid grid-cols-2 gap-3 text-sm">
           <label class="flex flex-col gap-1">
             <span class="text-zinc-500 dark:text-zinc-400">Model</span>
-            <template x-if="p.name === 'ollama' && p.models.length">
+            <!-- A <select> avoids password-manager icons; shown whenever a model
+                 list is available. The configured value is always an option, even
+                 if it is not (or no longer) in the fetched list. -->
+            <template x-if="p.models.length">
               <select x-model="p.default_model"
                       class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+                <template x-if="p.default_model && !p.models.includes(p.default_model)">
+                  <option :value="p.default_model" x-text="p.default_model + ' (configured)'"></option>
+                </template>
                 <template x-for="m in p.models" :key="m"><option :value="m" x-text="m"></option></template>
               </select>
             </template>
-            <template x-if="!(p.name === 'ollama' && p.models.length)">
+            <template x-if="!p.models.length">
               <input type="text" x-model="p.default_model"
+                     autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
                      class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
             </template>
           </label>

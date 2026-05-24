@@ -55,6 +55,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The Settings model field is now a dropdown whenever a model list is available,
+  instead of a free-text input that password managers (1Password, LastPass)
+  decorate with overlapping icons. The configured model stays selectable even if
+  it is not in the fetched list; the text-input fallback opts out of autofill.
 - Fetch no longer marks a video as an error with "Requested format is not
   available" when yt-dlp cannot select a media format. Because YTtools only
   needs metadata and captions, the metadata and caption calls now pass
