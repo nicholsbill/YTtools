@@ -148,6 +148,129 @@ def search(
         typer.echo(f"  {result.snippet}\n")
 
 
+@app.command()
+def blog(
+    video_id: str = typer.Argument(..., help="Stored video id to convert."),
+    length: str = typer.Option("medium", "--length", help="short, medium, or long."),
+    tone: str = typer.Option("", "--tone", help="Target tone (default: match the speaker)."),
+    title: str = typer.Option("", "--title", help="Override the article title."),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write Markdown to a file."),
+) -> None:
+    """Convert a stored video transcript into a Markdown article."""
+    from pathlib import Path
+
+    from yttools.core.llm import get_provider
+    from yttools.tools.blog import BlogError, generate_blog
+
+    if length not in {"short", "medium", "long"}:
+        typer.echo("--length must be short, medium, or long", err=True)
+        raise typer.Exit(code=1)
+
+    settings = load_settings()
+    provider = get_provider(settings)
+    database = _open_db()
+    try:
+        result = asyncio.run(
+            generate_blog(
+                database,
+                provider,
+                video_id,
+                tone=tone or None,
+                length=length,  # type: ignore[arg-type]
+                title_override=title or None,
+            )
+        )
+    except BlogError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        database.close()
+
+    if output:
+        Path(output).write_text(result.markdown, encoding="utf-8")
+        typer.echo(f"Wrote {result.word_count} words to {output}")
+    else:
+        typer.echo(result.markdown)
+
+
+@app.command()
+def summarize(
+    channel_id: str = typer.Argument(..., help="Channel id to summarize."),
+    types: list[str] = typer.Option(
+        ["overview", "cadence"], "--type", help="overview, topics, guests, cadence."
+    ),
+    force: bool = typer.Option(False, "--force", help="Ignore cached summaries."),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write Markdown to a file."),
+) -> None:
+    """Generate a structured digest of a channel."""
+    from pathlib import Path
+
+    from yttools.core.llm import get_provider
+    from yttools.tools.summarize import SummarizeError, summarize_channel
+
+    settings = load_settings()
+    provider = get_provider(settings)
+    database = _open_db()
+    try:
+        result = asyncio.run(
+            summarize_channel(database, provider, channel_id, summary_types=types, force=force)
+        )
+    except SummarizeError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        database.close()
+
+    body = "\n\n".join(section.content for section in result.sections)
+    if output:
+        Path(output).write_text(body, encoding="utf-8")
+        typer.echo(f"Wrote {output}")
+    else:
+        typer.echo(body)
+
+
+@app.command()
+def quotes(
+    source_id: str = typer.Argument(..., help="Channel id, or a video id with --video."),
+    video: bool = typer.Option(False, "--video", help="Treat the id as a single video."),
+    types: list[str] = typer.Option([], "--type", help="Restrict to quote types."),
+    fmt: str = typer.Option("md", "--format", help="md, csv, or json."),
+    regenerate: bool = typer.Option(False, "--regenerate", help="Re-extract via the model."),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write output to a file."),
+) -> None:
+    """Extract quotable lines from a channel or single video."""
+    from pathlib import Path
+
+    from yttools.core.llm import get_provider
+    from yttools.tools.quotes import QuotesError, export_quotes, extract_quotes, load_quotes
+
+    settings = load_settings()
+    provider = get_provider(settings)
+    database = _open_db()
+    try:
+        video_ids = [source_id] if video else [v.id for v in database.list_videos(source_id)]
+        if not video_ids:
+            typer.echo("No videos found for that source", err=True)
+            raise typer.Exit(code=1)
+        result = load_quotes(database, video_ids, types or None)
+        if regenerate or not result.total:
+            result = asyncio.run(
+                extract_quotes(database, provider, video_ids=video_ids, quote_types=types or None)
+            )
+        body, _ = export_quotes(result, fmt)
+    except QuotesError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        database.close()
+
+    if output:
+        Path(output).write_text(body, encoding="utf-8")
+        typer.echo(f"Wrote {output}")
+    else:
+        typer.echo(body)
+
+
 @app.command("list")
 def list_items(
     kind: str = typer.Argument(..., help="channels, playlists, or videos."),

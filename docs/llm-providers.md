@@ -1,21 +1,27 @@
 # LLM providers
 
 The AI-backed tools talk to a model provider through one abstraction
-(`core/llm.py`). v0.1.0 wires up the local provider; the hosted providers carry
-configuration and report health, and their completion paths become functional in
-v0.2.0.
+(`core/llm.py`). All four providers are wired: the local Ollama provider and the
+three hosted providers, each calling its vendor's REST API directly over httpx
+(no vendor SDKs). Completion, streaming, and JSON mode are supported everywhere.
 
 ## Supported providers
 
-| Provider  | Kind   | Default model         | Status in v0.1.0          |
-|-----------|--------|-----------------------|---------------------------|
-| Ollama    | local  | `llama3.1:8b`         | Fully functional          |
-| Anthropic | hosted | `claude-sonnet-4-5`   | Config and health only    |
-| OpenAI    | hosted | `gpt-4o`              | Config and health only    |
-| Gemini    | hosted | `gemini-2.0-flash`    | Config and health only    |
+| Provider  | Kind   | Default model         | Completion | Embeddings        |
+|-----------|--------|-----------------------|------------|-------------------|
+| Ollama    | local  | `llama3.1:8b`         | Yes        | Yes               |
+| Anthropic | hosted | `claude-sonnet-4-5`   | Yes        | No (use Ollama)   |
+| OpenAI    | hosted | `gpt-4o`              | Yes        | Yes               |
+| Gemini    | hosted | `gemini-2.0-flash`    | Yes        | Yes               |
 
-Embeddings are produced locally with Ollama using `nomic-embed-text` (768
-dimensions). The embedding model is independent of the completion model.
+By default, embeddings are produced locally with Ollama using `nomic-embed-text`
+(768 dimensions). The embedding model is independent of the completion model.
+Anthropic ships no embeddings endpoint, so embedding requests there fall back to
+Ollama.
+
+The default models above are starting points. Pick a current model for your
+account on the Settings page; "Test connection" confirms the key works and fills
+the model picker with the models your account can use.
 
 ## API keys
 

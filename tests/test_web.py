@@ -47,7 +47,9 @@ def _seed(client: TestClient) -> None:
     )
 
 
-@pytest.mark.parametrize("path", ["/", "/fetch", "/search", "/settings"])
+@pytest.mark.parametrize(
+    "path", ["/", "/fetch", "/search", "/settings", "/blog", "/summarize", "/quotes"]
+)
 def test_pages_render(client: TestClient, path: str) -> None:
     response = client.get(path)
     assert response.status_code == 200
@@ -106,8 +108,8 @@ def test_providers_listed(client: TestClient) -> None:
     providers = client.get("/api/providers").json()
     names = {p["name"] for p in providers}
     assert names == set(PROVIDER_NAMES)
-    hosted = [p for p in providers if p["name"] != LOCAL_PROVIDER]
-    assert all(p["functional"] is False for p in hosted)
+    # Every provider's completion path is wired now.
+    assert all(p["functional"] is True for p in providers)
 
 
 def test_settings_save_persists(client: TestClient, tmp_home: Path) -> None:
@@ -150,6 +152,75 @@ def test_youtube_settings_roundtrip(client: TestClient, tmp_home: Path) -> None:
     assert 'cookies_from_browser = "chrome"' in (tmp_home / "config.toml").read_text(
         encoding="utf-8"
     )
+
+
+class _FakeProvider:
+    name = "fake"
+    default_model = "fake-1"
+
+    def __init__(self, payload: str) -> None:
+        self._payload = payload
+
+    async def complete(self, prompt: str, **kwargs: object) -> str:
+        return self._payload
+
+
+def test_videos_reports_transcript_flag(client: TestClient) -> None:
+    _seed(client)
+    videos = client.get("/api/videos").json()
+    assert any(v["id"] == "vid00000001" and v["has_transcript"] for v in videos)
+
+
+def test_blog_generates_article(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed(client)
+    payload = (
+        '{"title": "My Article", "sections": '
+        '[{"heading": "Intro", "start_seconds": 12, "markdown": "Body text."}]}'
+    )
+    monkeypatch.setattr(
+        "yttools.web.routes.api.get_provider", lambda settings: _FakeProvider(payload)
+    )
+    response = client.post("/api/blog", json={"video_id": "vid00000001", "length": "short"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["title"] == "My Article"
+    assert "## Intro" in data["markdown"]
+    assert "watch?v=vid00000001&t=12s" in data["markdown"]
+    assert data["word_count"] > 0
+
+
+def test_blog_unknown_video_returns_400(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("{}"))
+    response = client.post("/api/blog", json={"video_id": "missing"})
+    assert response.status_code == 400
+
+
+def test_summarize_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed(client)
+    monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("{}"))
+    response = client.post(
+        "/api/summarize", json={"channel_id": "UC_x", "summary_types": ["cadence"]}
+    )
+    assert response.status_code == 200
+    sections = response.json()["sections"]
+    assert sections and sections[0]["summary_type"] == "cadence"
+
+
+def test_quotes_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed(client)
+    payload = '{"quotes": [{"text": "Insightful line", "type": "statement", "start_seconds": 12}]}'
+    monkeypatch.setattr(
+        "yttools.web.routes.api.get_provider", lambda settings: _FakeProvider(payload)
+    )
+    response = client.post(
+        "/api/quotes", json={"source": "video", "id": "vid00000001", "regenerate": True}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert "watch?v=vid00000001&t=12s" in data["quotes"][0]["url"]
 
 
 def test_start_fetch_returns_job_id(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

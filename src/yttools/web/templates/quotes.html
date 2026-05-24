@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %} — Quotes{% endblock %}
+{% block content %}
+<div x-data="quotesPanel()" x-init="loadSources()" class="max-w-5xl space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold mb-1">Quotes</h1>
+    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+      Extract quotable lines from a channel or a single video. Uses the default
+      model provider. Each quote links to its moment in the video.
+    </p>
+  </div>
+
+  <form @submit.prevent="run()" class="space-y-3">
+    <div class="flex flex-wrap gap-4 text-sm items-end">
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">Source</span>
+        <select x-model="source" @change="onSourceChange()"
+                class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+          <option value="channel">Channel</option>
+          <option value="video">Single video</option>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 flex-1 min-w-64">
+        <span class="text-zinc-500 dark:text-zinc-400" x-text="source === 'channel' ? 'Channel' : 'Video'"></span>
+        <select x-model="id"
+                class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+          <option value="">Select…</option>
+          <template x-for="o in (source === 'channel' ? channels : videos)" :key="o.id">
+            <option :value="o.id" x-text="o.title"></option>
+          </template>
+        </select>
+      </label>
+    </div>
+
+    <div class="flex flex-wrap gap-3 text-sm">
+      <template x-for="t in allTypes" :key="t">
+        <label class="flex items-center gap-1">
+          <input type="checkbox" :value="t" x-model="types">
+          <span class="capitalize" x-text="t"></span>
+        </label>
+      </template>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" :disabled="!id || running"
+              class="rounded bg-accent px-4 py-2 text-white text-sm font-medium disabled:opacity-50">
+        <span x-text="running ? 'Extracting…' : 'Extract'"></span>
+      </button>
+      <label class="flex items-center gap-1 text-sm text-zinc-500">
+        <input type="checkbox" x-model="regenerate"> Re-extract
+      </label>
+      <template x-if="quotes.length">
+        <span class="flex items-center gap-2 text-xs">
+          <button type="button" class="hover:text-accent" @click="download('csv')">CSV</button>
+          <button type="button" class="hover:text-accent" @click="download('json')">JSON</button>
+          <button type="button" class="hover:text-accent" @click="download('md')">Markdown</button>
+        </span>
+      </template>
+      <span x-show="error" class="text-sm text-accent" x-text="error"></span>
+    </div>
+  </form>
+
+  <div x-show="quotes.length" class="space-y-2">
+    <div class="flex items-center gap-3 text-sm">
+      <span class="text-zinc-500" x-text="quotes.length + ' quote(s)'"></span>
+      <select x-model="filterType" class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs">
+        <option value="">all types</option>
+        <template x-for="t in allTypes" :key="t"><option :value="t" x-text="t"></option></template>
+      </select>
+    </div>
+    <table class="w-full text-sm border-collapse">
+      <thead class="text-left text-xs text-zinc-400">
+        <tr><th class="py-1 pr-2">Quote</th><th class="py-1 pr-2">Type</th><th class="py-1 pr-2">Video</th><th class="py-1">Link</th></tr>
+      </thead>
+      <tbody>
+        <template x-for="(q, i) in filtered()" :key="i">
+          <tr class="border-t border-zinc-200 dark:border-zinc-800 align-top">
+            <td class="py-2 pr-2" x-text="q.text"></td>
+            <td class="py-2 pr-2 text-zinc-500" x-text="q.quote_type"></td>
+            <td class="py-2 pr-2 text-zinc-500" x-text="q.video_title"></td>
+            <td class="py-2"><a :href="q.url" target="_blank" rel="noopener" class="text-accent hover:underline font-mono text-xs" x-text="clock(q.start_seconds || 0)"></a></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

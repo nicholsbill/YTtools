@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %} — Summarize{% endblock %}
+{% block content %}
+<div x-data="summarizePanel()" x-init="loadChannels()" class="max-w-4xl space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold mb-1">Summarize</h1>
+    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+      Structured digest of a channel. Uses the default model provider; cadence is
+      computed without a model. Results are cached until you force a regenerate.
+    </p>
+  </div>
+
+  <form @submit.prevent="run()" class="space-y-3">
+    <div class="flex flex-col gap-1 text-sm">
+      <span class="text-zinc-500 dark:text-zinc-400">Channel</span>
+      <select x-model="channelId"
+              class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-2">
+        <option value="">Select a channel…</option>
+        <template x-for="c in channels" :key="c.id">
+          <option :value="c.id" x-text="c.title"></option>
+        </template>
+      </select>
+    </div>
+
+    <div class="flex flex-wrap gap-4 text-sm">
+      <template x-for="t in allTypes" :key="t">
+        <label class="flex items-center gap-1">
+          <input type="checkbox" :value="t" x-model="types">
+          <span class="capitalize" x-text="t"></span>
+        </label>
+      </template>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" :disabled="!channelId || !types.length || running"
+              class="rounded bg-accent px-4 py-2 text-white text-sm font-medium disabled:opacity-50">
+        <span x-text="running ? 'Generating…' : 'Generate'"></span>
+      </button>
+      <label class="flex items-center gap-1 text-sm text-zinc-500">
+        <input type="checkbox" x-model="force"> Force regenerate
+      </label>
+      <span x-show="error" class="text-sm text-accent" x-text="error"></span>
+    </div>
+  </form>
+
+  <div class="space-y-4">
+    <template x-for="section in sections" :key="section.summary_type">
+      <div class="border border-zinc-200 dark:border-zinc-800 rounded p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs uppercase tracking-wide text-zinc-400" x-text="section.summary_type"></span>
+          <button class="text-xs text-zinc-500 hover:text-accent"
+                  @click="downloadSection(section)">Download .md</button>
+        </div>
+        <div class="prose-blog text-sm" x-html="render(section.content)"></div>
+      </div>
+    </template>
+  </div>
+</div>
+{% endblock %}

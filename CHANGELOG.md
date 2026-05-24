@@ -8,6 +8,25 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Hosted LLM providers are now wired: Anthropic, OpenAI, and Gemini implement
+  completion, streaming, and JSON mode by calling each vendor's REST API
+  directly (no vendor SDKs). Health checks list available models. Embeddings
+  remain local via Ollama (the hosted `embed()` calls are unsupported except
+  OpenAI's).
+- Blog tool: convert a stored video transcript into a Markdown article whose
+  section headers deep-link back to the matching YouTube timestamps. Available
+  in the web UI (`/blog`), via the API (`POST /api/blog`), and the CLI
+  (`yttools blog VIDEO_ID`).
+- Summarize tool: structured channel digests with four types — overview
+  (map-reduce), topics (per-video extraction then fuzzy clustering, persisted to
+  the topics tables), guests (per-video interview extraction), and cadence (pure
+  SQL, no model). Results are cached and reused unless regenerated. Web
+  (`/summarize`), API (`POST /api/summarize`), and CLI (`yttools summarize`).
+- Quotes tool: extract quotable lines (statement, prediction, stat, claim, list)
+  from a channel or single video, de-duplicated and timestamp-linked, with CSV,
+  JSON, and Markdown export. Web (`/quotes`), API (`POST /api/quotes`), and CLI
+  (`yttools quotes`).
+- Settings page highlights the active model provider with an "Active" badge.
 - Fetch can authenticate to YouTube with cookies to clear the "sign in to
   confirm you're not a bot" gate. Configure `youtube.cookies_from_browser` or
   `youtube.cookies_file` (browser wins if both set) and `youtube.sleep_requests`

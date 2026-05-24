@@ -26,7 +26,10 @@ from yttools.core.models import (
     Job,
     JobStatus,
     Playlist,
+    Quote,
     Segment,
+    Summary,
+    Topic,
     Transcript,
     Video,
 )
@@ -395,6 +398,140 @@ class Database:
         row = self._fetchone("SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued', 'running')")
         return int(row["n"]) if row else 0
 
+    # -- summaries -------------------------------------------------------
+
+    def upsert_summary(self, summary: Summary) -> None:
+        """Insert or replace a summary keyed by (target_type, target_id, summary_type)."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO summaries (target_type, target_id, summary_type, content, model_used)"
+                " VALUES (?, ?, ?, ?, ?)"
+                " ON CONFLICT(target_type, target_id, summary_type) DO UPDATE SET"
+                " content=excluded.content, model_used=excluded.model_used,"
+                " generated_at=CURRENT_TIMESTAMP",
+                (
+                    summary.target_type,
+                    summary.target_id,
+                    summary.summary_type,
+                    summary.content,
+                    summary.model_used,
+                ),
+            )
+            self._conn.commit()
+
+    def get_summary(self, target_type: str, target_id: str, summary_type: str) -> Summary | None:
+        row = self._fetchone(
+            "SELECT * FROM summaries WHERE target_type=? AND target_id=? AND summary_type=?",
+            (target_type, target_id, summary_type),
+        )
+        return _row_to_summary(row) if row else None
+
+    # -- quotes ----------------------------------------------------------
+
+    def delete_quotes_for_video(self, video_id: str) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM quotes WHERE video_id = ?", (video_id,))
+            self._conn.commit()
+
+    def add_quotes(self, quotes: list[Quote]) -> None:
+        if not quotes:
+            return
+        with self._lock:
+            self._conn.executemany(
+                "INSERT INTO quotes (video_id, text, quote_type, start_seconds, end_seconds,"
+                " context, speaker_guess, model_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        q.video_id,
+                        q.text,
+                        q.quote_type,
+                        q.start_seconds,
+                        q.end_seconds,
+                        q.context,
+                        q.speaker_guess,
+                        q.model_used,
+                    )
+                    for q in quotes
+                ],
+            )
+            self._conn.commit()
+
+    def list_quotes(
+        self,
+        *,
+        video_ids: list[str] | None = None,
+        quote_types: list[str] | None = None,
+    ) -> list[Quote]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if video_ids:
+            clauses.append(f"video_id IN ({', '.join('?' for _ in video_ids)})")
+            params.extend(video_ids)
+        if quote_types:
+            clauses.append(f"quote_type IN ({', '.join('?' for _ in quote_types)})")
+            params.extend(quote_types)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        rows = self._fetchall(
+            f"SELECT * FROM quotes{where} ORDER BY video_id, start_seconds", tuple(params)
+        )
+        return [_row_to_quote(row) for row in rows]
+
+    # -- topics ----------------------------------------------------------
+
+    def clear_topics(self, channel_id: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM video_topics WHERE topic_id IN"
+                " (SELECT id FROM topics WHERE channel_id = ?)",
+                (channel_id,),
+            )
+            self._conn.execute("DELETE FROM topics WHERE channel_id = ?", (channel_id,))
+            self._conn.commit()
+
+    def add_topic(self, topic: Topic) -> int:
+        with self._lock:
+            cursor = self._conn.execute(
+                "INSERT INTO topics (channel_id, label, first_video_id, last_video_id,"
+                " first_seen_at, last_seen_at, video_count) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    topic.channel_id,
+                    topic.label,
+                    topic.first_video_id,
+                    topic.last_video_id,
+                    topic.first_seen_at.isoformat() if topic.first_seen_at else None,
+                    topic.last_seen_at.isoformat() if topic.last_seen_at else None,
+                    topic.video_count,
+                ),
+            )
+            self._conn.commit()
+            return int(cursor.lastrowid or 0)
+
+    def add_video_topic(self, video_id: str, topic_id: int, relevance: float = 1.0) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO video_topics (video_id, topic_id, relevance)"
+                " VALUES (?, ?, ?)",
+                (video_id, topic_id, relevance),
+            )
+            self._conn.commit()
+
+    def list_topics(self, channel_id: str) -> list[Topic]:
+        rows = self._fetchall(
+            "SELECT * FROM topics WHERE channel_id = ? ORDER BY video_count DESC, label",
+            (channel_id,),
+        )
+        return [_row_to_topic(row) for row in rows]
+
+    def list_video_topics(self, channel_id: str) -> list[dict[str, Any]]:
+        """Return joined (video_id, topic_id, label, relevance, published_at) rows."""
+        rows = self._fetchall(
+            "SELECT vt.video_id, vt.topic_id, vt.relevance, t.label, v.published_at"
+            " FROM video_topics vt JOIN topics t ON t.id = vt.topic_id"
+            " JOIN videos v ON v.id = vt.video_id WHERE t.channel_id = ?",
+            (channel_id,),
+        )
+        return [dict(row) for row in rows]
+
     # -- search ----------------------------------------------------------
 
     def search_fts(
@@ -581,4 +718,44 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         started_at=_parse_dt(row["started_at"]),
         finished_at=_parse_dt(row["finished_at"]),
         created_at=_parse_dt(row["created_at"]),
+    )
+
+
+def _row_to_summary(row: sqlite3.Row) -> Summary:
+    return Summary(
+        id=row["id"],
+        target_type=row["target_type"],
+        target_id=row["target_id"],
+        summary_type=row["summary_type"],
+        content=row["content"],
+        model_used=row["model_used"],
+        generated_at=_parse_dt(row["generated_at"]),
+    )
+
+
+def _row_to_quote(row: sqlite3.Row) -> Quote:
+    return Quote(
+        id=row["id"],
+        video_id=row["video_id"],
+        text=row["text"],
+        quote_type=row["quote_type"],
+        start_seconds=row["start_seconds"],
+        end_seconds=row["end_seconds"],
+        context=row["context"],
+        speaker_guess=row["speaker_guess"],
+        model_used=row["model_used"],
+        extracted_at=_parse_dt(row["extracted_at"]),
+    )
+
+
+def _row_to_topic(row: sqlite3.Row) -> Topic:
+    return Topic(
+        id=row["id"],
+        channel_id=row["channel_id"],
+        label=row["label"],
+        first_video_id=row["first_video_id"],
+        last_video_id=row["last_video_id"],
+        first_seen_at=_parse_dt(row["first_seen_at"]),
+        last_seen_at=_parse_dt(row["last_seen_at"]),
+        video_count=row["video_count"],
     )

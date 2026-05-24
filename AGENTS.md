@@ -17,8 +17,8 @@ Layering, from the bottom up:
   (`exports.py`), the SSE progress bus (`progress.py`), the LLM provider
   abstraction (`llm.py`), and embedding helpers (`embeddings.py`).
 - `tools/` — one module per user-facing tool. Tools depend on `core/`, never the
-  reverse. v0.1.0 ships `fetch.py` and `search.py`; the rest are added in later
-  releases.
+  reverse. Shipped so far: `fetch.py`, `search.py`, `blog.py`, `summarize.py`,
+  and `quotes.py`; Compare, Timeline, and Ask are added in later releases.
 - `web/` — the FastAPI app factory, route handlers (`routes/`), Jinja2 templates,
   and static assets.
 - `cli.py` — Typer commands, one per tool plus `serve`, `config`, `db`, `version`.
@@ -91,9 +91,15 @@ Record non-obvious choices here as they are made.
 - **Package name:** `yttools` (confirmed available on PyPI at build time).
 - **Env var names for API keys:** the hosted-provider keys follow the conventional
   `<PROVIDER>_API_KEY` form. The exact names live in `docs/llm-providers.md`.
-- **v0.1.0 provider scope:** the local Ollama provider is fully wired. The three
-  hosted providers exist with health checks and config plumbing, but `complete()`
-  and `stream()` raise `NotImplementedError` pointing at v0.2.0.
+- **LLM providers:** all four are wired. Each hosted provider (Anthropic,
+  OpenAI, Gemini) calls its vendor REST API directly over httpx (no vendor
+  SDKs); `_HostedProvider` owns the client lifecycle, concurrency gate, and the
+  shared POST/GET/SSE helpers. JSON mode uses each vendor's native feature
+  (OpenAI `response_format`, Gemini `responseMimeType`) or, for Anthropic, a
+  system-prompt instruction. `health_check()` short-circuits to unavailable when
+  no key is set (no network) and otherwise lists models via the vendor's models
+  endpoint. Embeddings: Ollama and OpenAI/Gemini support them; Anthropic does
+  not (its `embed()` raises `LLMError`, and callers fall back to Ollama).
 - **Database connection:** one `sqlite3` connection opened with
   `check_same_thread=False` and guarded by a lock. Async callers wrap DB calls in
   `asyncio.to_thread`. This is plenty for a local single-user app and sidesteps

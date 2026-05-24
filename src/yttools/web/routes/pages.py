@@ -18,11 +18,11 @@ router = APIRouter()
 NAV_ITEMS: list[dict[str, Any]] = [
     {"key": "fetch", "label": "Fetch", "href": "/fetch", "enabled": True},
     {"key": "search", "label": "Search", "href": "/search", "enabled": True},
-    {"key": "summarize", "label": "Summarize", "href": "#", "enabled": False},
+    {"key": "summarize", "label": "Summarize", "href": "/summarize", "enabled": True},
     {"key": "compare", "label": "Compare", "href": "#", "enabled": False},
-    {"key": "quotes", "label": "Quotes", "href": "#", "enabled": False},
+    {"key": "quotes", "label": "Quotes", "href": "/quotes", "enabled": True},
     {"key": "timeline", "label": "Timeline", "href": "#", "enabled": False},
-    {"key": "blog", "label": "Blog", "href": "#", "enabled": False},
+    {"key": "blog", "label": "Blog", "href": "/blog", "enabled": True},
     {"key": "ask", "label": "Ask", "href": "#", "enabled": False},
 ]
 
@@ -67,6 +67,21 @@ async def fetch_page(request: Request) -> HTMLResponse:
 @router.get("/search", response_class=HTMLResponse)
 async def search_page(request: Request) -> HTMLResponse:
     return _render(request, "search.html", "search")
+
+
+@router.get("/blog", response_class=HTMLResponse)
+async def blog_page(request: Request) -> HTMLResponse:
+    return _render(request, "blog.html", "blog")
+
+
+@router.get("/summarize", response_class=HTMLResponse)
+async def summarize_page(request: Request) -> HTMLResponse:
+    return _render(request, "summarize.html", "summarize")
+
+
+@router.get("/quotes", response_class=HTMLResponse)
+async def quotes_page(request: Request) -> HTMLResponse:
+    return _render(request, "quotes.html", "quotes")
 
 
 @router.get("/settings", response_class=HTMLResponse)

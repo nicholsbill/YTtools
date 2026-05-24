@@ -20,9 +20,12 @@ from yttools import config as config_module
 from yttools.config import load_settings
 from yttools.core import exports
 from yttools.core.db import Database
-from yttools.core.llm import build_provider, build_providers
+from yttools.core.llm import build_provider, build_providers, get_provider
+from yttools.tools.blog import BlogError, BlogLength, generate_blog
 from yttools.tools.fetch import FetchConfig, FetchJob, youtube_options_from_settings
+from yttools.tools.quotes import QuotesError, extract_quotes, load_quotes
 from yttools.tools.search import SearchError, SearchFilters, search
+from yttools.tools.summarize import SummarizeError, summarize_channel
 
 router = APIRouter(prefix="/api")
 
@@ -32,6 +35,26 @@ class FetchRequest(BaseModel):
     include_transcripts: bool = True
     languages: list[str] = Field(default_factory=lambda: ["en"])
     force_refresh: bool = False
+
+
+class BlogRequest(BaseModel):
+    video_id: str
+    tone: str = ""
+    length: BlogLength = "medium"
+    title: str = ""
+
+
+class SummarizeRequest(BaseModel):
+    channel_id: str
+    summary_types: list[str] = Field(default_factory=lambda: ["overview"])
+    force: bool = False
+
+
+class QuotesRequest(BaseModel):
+    source: str = "channel"  # "channel" or "video"
+    id: str
+    quote_types: list[str] = Field(default_factory=list)
+    regenerate: bool = False
 
 
 class ProviderSettingUpdate(BaseModel):
@@ -73,6 +96,85 @@ async def channels(request: Request) -> list[dict[str, Any]]:
     database = _db(request)
     rows = await asyncio.to_thread(database.list_channels)
     return [{"id": channel.id, "title": channel.title} for channel in rows]
+
+
+@router.get("/videos")
+async def videos(request: Request, channel: str | None = None) -> list[dict[str, Any]]:
+    database = _db(request)
+
+    def collect() -> list[dict[str, Any]]:
+        return [
+            {
+                "id": video.id,
+                "title": video.title,
+                "channel_id": video.channel_id,
+                "has_transcript": database.transcript_exists(video.id),
+            }
+            for video in database.list_videos(channel)
+        ]
+
+    return await asyncio.to_thread(collect)
+
+
+@router.post("/blog")
+async def generate_blog_endpoint(request: Request, payload: BlogRequest) -> dict[str, Any]:
+    settings = request.app.state.settings
+    provider = get_provider(settings)
+    try:
+        result = await generate_blog(
+            _db(request),
+            provider,
+            payload.video_id,
+            tone=payload.tone or None,
+            length=payload.length,
+            title_override=payload.title or None,
+        )
+    except BlogError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except NotImplementedError as error:  # provider not wired (defensive)
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return result.model_dump()
+
+
+@router.post("/summarize")
+async def summarize_endpoint(request: Request, payload: SummarizeRequest) -> dict[str, Any]:
+    provider = get_provider(request.app.state.settings)
+    try:
+        result = await summarize_channel(
+            _db(request),
+            provider,
+            payload.channel_id,
+            summary_types=payload.summary_types,
+            force=payload.force,
+        )
+    except (SummarizeError, NotImplementedError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return result.model_dump()
+
+
+def _resolve_video_ids(database: Database, source: str, source_id: str) -> list[str]:
+    if source == "video":
+        return [source_id]
+    return [video.id for video in database.list_videos(source_id)]
+
+
+@router.post("/quotes")
+async def quotes_endpoint(request: Request, payload: QuotesRequest) -> dict[str, Any]:
+    database = _db(request)
+    provider = get_provider(request.app.state.settings)
+    video_ids = await asyncio.to_thread(_resolve_video_ids, database, payload.source, payload.id)
+    if not video_ids:
+        raise HTTPException(status_code=400, detail="No videos found for that source")
+    types = payload.quote_types or None
+    try:
+        if not payload.regenerate:
+            existing = await asyncio.to_thread(load_quotes, database, video_ids, types)
+            if existing.total:
+                return existing.model_dump()
+        result = await extract_quotes(database, provider, video_ids=video_ids, quote_types=types)
+    except (QuotesError, NotImplementedError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return result.model_dump()
 
 
 @router.post("/fetch")
@@ -193,7 +295,7 @@ async def providers(request: Request) -> list[dict[str, Any]]:
                 "default_model": getattr(provider, "default_model", ""),
                 "key_set": bool(api_key),
                 "key_masked": _mask(api_key),
-                "functional": name == "ollama",
+                "functional": True,
             }
         )
     return results

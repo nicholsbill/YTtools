@@ -58,9 +58,52 @@ yttools search "pyth*" --json
 - Results link to the exact YouTube timestamp of each match.
 - Filter by channel, publish date range, and video length.
 
+## Blog
+
+Turn a single stored video transcript into a publishable Markdown article.
+
+```bash
+yttools blog VIDEO_ID --length medium --output article.md
+yttools blog VIDEO_ID --tone "plain and direct" --title "My title"
+```
+
+- Uses the default configured model provider (local Ollama or a hosted provider
+  with an API key set in Settings).
+- The model returns a title and sections; each section header gets a
+  `[Watch this section]` link to its YouTube timestamp.
+- Length presets target roughly 800 (short), 1500 (medium), or 2400 (long) words.
+- In the web UI (`/blog`), pick a fetched video and see a side-by-side rendered
+  preview and raw Markdown, with a download button.
+
+## Summarize
+
+Structured digest of a channel.
+
+```bash
+yttools summarize CHANNEL_ID --type overview --type topics --type cadence
+```
+
+- Types: `overview` (map-reduce synthesis), `topics` (per-video labels clustered
+  and ranked), `guests` (interview guests), `cadence` (posting rate, gaps, median
+  length — computed without a model).
+- Topics are persisted so Compare and Timeline can reuse them.
+- Results are cached in the database; pass `--force` (or check "Force
+  regenerate" in the UI) to recompute.
+
+## Quotes
+
+Extract quotable lines from a channel or single video.
+
+```bash
+yttools quotes CHANNEL_ID --type stat --type prediction --format csv -o quotes.csv
+yttools quotes VIDEO_ID --video --regenerate
+```
+
+- Quote types: statement, prediction, stat, claim, list.
+- Each quote links to its timestamp; near-duplicates are merged.
+- Export as CSV, JSON, or Markdown (web and CLI).
+
 ## Planned
 
-- **Summarize, Quotes, Blog** (v0.2.0): structured digests, quote extraction, and
-  transcript-to-article conversion.
 - **Compare, Timeline, Ask** (v0.3.0): cross-channel comparison, topic timelines,
   and retrieval-augmented question answering over a channel.

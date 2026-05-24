@@ -21,7 +21,7 @@ Eight tools share one local storage layer (SQLite):
 - **Blog** — convert a single video into a structured Markdown article with timestamp citations.
 - **Ask** — local retrieval-augmented question answering over a channel, with cited answers.
 
-Fetch and Search ship in v0.1.0. The AI-backed tools land in v0.2.0 and v0.3.0 (see the roadmap).
+Fetch, Search, Summarize, Quotes, and Blog work today. Compare, Timeline, and Ask land in a later release (see the roadmap).
 
 ## Why local-first
 
@@ -111,7 +111,7 @@ yttools config set fetch.concurrent_videos 1
 
 ## AI features
 
-The AI-backed tools default to a local Ollama model, so they work offline with no account. If you prefer a hosted model, three hosted providers are supported: add an API key on the Settings page or via the matching environment variable. Keys resolve in this order: config file value, then environment variable. Without a key, that provider stays disabled. See [docs/llm-providers.md](./docs/llm-providers.md) for the list of supported providers and their models.
+The AI-backed tools default to a local Ollama model, so they work offline with no account. If you prefer a hosted model, three are supported (Anthropic, OpenAI, Gemini): add an API key on the Settings page or via the matching environment variable, then use "Test connection" to confirm it and load the model picker. Keys resolve in this order: config file value, then environment variable. Without a key, that provider stays disabled. See [docs/llm-providers.md](./docs/llm-providers.md) for the supported providers and their models.
 
 ## Roadmap
 

@@ -248,3 +248,228 @@ function settingsPanel(currentDefault) {
     },
   };
 }
+
+function renderMarkdown(md) {
+  if (window.marked && typeof window.marked.parse === "function") {
+    return window.marked.parse(md);
+  }
+  return `<pre class="whitespace-pre-wrap">${escapeHtml(md)}</pre>`;
+}
+
+function blogPanel() {
+  return {
+    videos: [],
+    videoId: "",
+    tone: "",
+    length: "medium",
+    title: "",
+    running: false,
+    error: "",
+    markdown: "",
+    rendered: "",
+    modelUsed: "",
+    wordCount: 0,
+    async loadVideos() {
+      try {
+        this.videos = await (await fetch("/api/videos")).json();
+      } catch (_) {
+        this.videos = [];
+      }
+    },
+    async convert() {
+      if (!this.videoId) return;
+      this.error = "";
+      this.running = true;
+      this.markdown = "";
+      this.rendered = "";
+      this.wordCount = 0;
+      try {
+        const response = await fetch("/api/blog", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            video_id: this.videoId,
+            tone: this.tone,
+            length: this.length,
+            title: this.title,
+          }),
+        });
+        if (!response.ok) {
+          this.error = (await response.json()).detail || "Conversion failed.";
+          return;
+        }
+        const data = await response.json();
+        this.markdown = data.markdown;
+        this.rendered = renderMarkdown(data.markdown);
+        this.modelUsed = data.model_used || "";
+        this.wordCount = data.word_count || 0;
+      } catch (_) {
+        this.error = "Could not reach the server.";
+      } finally {
+        this.running = false;
+      }
+    },
+    download() {
+      if (!this.markdown) return;
+      downloadText(this.markdown, `${this.videoId || "article"}.md`, "text/markdown");
+    },
+  };
+}
+
+function downloadText(text, filename, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function summarizePanel() {
+  return {
+    channels: [],
+    channelId: "",
+    allTypes: ["overview", "topics", "guests", "cadence"],
+    types: ["overview", "cadence"],
+    force: false,
+    running: false,
+    error: "",
+    sections: [],
+    render: renderMarkdown,
+    async loadChannels() {
+      try {
+        this.channels = await (await fetch("/api/channels")).json();
+      } catch (_) {
+        this.channels = [];
+      }
+    },
+    async run() {
+      this.error = "";
+      this.running = true;
+      this.sections = [];
+      try {
+        const response = await fetch("/api/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channel_id: this.channelId,
+            summary_types: this.types,
+            force: this.force,
+          }),
+        });
+        if (!response.ok) {
+          this.error = (await response.json()).detail || "Failed.";
+          return;
+        }
+        this.sections = (await response.json()).sections;
+      } catch (_) {
+        this.error = "Could not reach the server.";
+      } finally {
+        this.running = false;
+      }
+    },
+    downloadSection(section) {
+      downloadText(section.content, `${this.channelId}-${section.summary_type}.md`, "text/markdown");
+    },
+  };
+}
+
+function csvCell(value) {
+  return `"${(value == null ? "" : String(value)).replace(/"/g, '""')}"`;
+}
+
+function quotesToCsv(rows) {
+  const header = ["quote", "type", "video_title", "start_seconds", "url", "speaker", "context"];
+  const lines = [header.join(",")];
+  for (const q of rows) {
+    lines.push(
+      [q.text, q.quote_type, q.video_title, q.start_seconds, q.url, q.speaker_guess, q.context]
+        .map(csvCell)
+        .join(",")
+    );
+  }
+  return lines.join("\n");
+}
+
+function quotesToMarkdown(rows) {
+  const lines = ["# Quotes", ""];
+  for (const q of rows) {
+    lines.push(`> ${q.text}`);
+    let attribution = `— *${q.quote_type}*, [${q.video_title}](${q.url})`;
+    if (q.speaker_guess) attribution += ` · ${q.speaker_guess}`;
+    lines.push(attribution, "");
+  }
+  return `${lines.join("\n").trim()}\n`;
+}
+
+function quotesPanel() {
+  return {
+    channels: [],
+    videos: [],
+    source: "channel",
+    id: "",
+    allTypes: ["statement", "prediction", "stat", "claim", "list"],
+    types: [],
+    regenerate: false,
+    running: false,
+    error: "",
+    quotes: [],
+    filterType: "",
+    clock,
+    async loadSources() {
+      try {
+        this.channels = await (await fetch("/api/channels")).json();
+        this.videos = await (await fetch("/api/videos")).json();
+      } catch (_) {
+        /* leave empty on failure */
+      }
+    },
+    onSourceChange() {
+      this.id = "";
+    },
+    filtered() {
+      return this.filterType
+        ? this.quotes.filter((q) => q.quote_type === this.filterType)
+        : this.quotes;
+    },
+    async run() {
+      if (!this.id) return;
+      this.error = "";
+      this.running = true;
+      this.quotes = [];
+      try {
+        const response = await fetch("/api/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: this.source,
+            id: this.id,
+            quote_types: this.types,
+            regenerate: this.regenerate,
+          }),
+        });
+        if (!response.ok) {
+          this.error = (await response.json()).detail || "Failed.";
+          return;
+        }
+        this.quotes = (await response.json()).quotes;
+        if (!this.quotes.length) this.error = "No quotes found.";
+      } catch (_) {
+        this.error = "Could not reach the server.";
+      } finally {
+        this.running = false;
+      }
+    },
+    download(fmt) {
+      const rows = this.filtered();
+      if (fmt === "json") {
+        downloadText(JSON.stringify(rows, null, 2), "quotes.json", "application/json");
+      } else if (fmt === "csv") {
+        downloadText(quotesToCsv(rows), "quotes.csv", "text/csv");
+      } else {
+        downloadText(quotesToMarkdown(rows), "quotes.md", "text/markdown");
+      }
+    },
+  };
+}
