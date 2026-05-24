@@ -123,3 +123,84 @@ async def test_download_captions_none_when_missing(
     _install_runner(monkeypatch, 0, "")
     result = await youtube.download_captions("vid00000001", tmp_path)
     assert result is None
+
+
+def test_youtube_options_browser_wins_over_file() -> None:
+    options = youtube.YouTubeOptions(
+        cookies_from_browser="firefox", cookies_file="/tmp/cookies.txt", sleep_requests=0
+    )
+    assert options.extra_args() == ["--cookies-from-browser", "firefox"]
+
+
+def test_youtube_options_cookies_file_and_sleep_expand() -> None:
+    options = youtube.YouTubeOptions(cookies_file="~/cookies.txt", sleep_requests=1.5)
+    args = options.extra_args()
+    assert "--cookies" in args
+    # The leading ~ is expanded so yt-dlp gets an absolute path.
+    assert not any(arg.startswith("~") for arg in args)
+    assert args[args.index("--sleep-requests") + 1] == "1.5"
+
+
+def test_youtube_options_empty_is_noop() -> None:
+    assert youtube.YouTubeOptions().extra_args() == []
+
+
+async def test_options_threaded_into_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {"id": "vid00000001", "title": "x", "live_status": "not_live"}
+    captured = _install_runner(monkeypatch, 0, json.dumps(payload))
+    options = youtube.YouTubeOptions(cookies_from_browser="chrome", sleep_requests=1.0)
+    await youtube.get_video_metadata("vid00000001", options=options)
+    args = captured["args"]
+    assert "--cookies-from-browser" in args
+    assert args[args.index("--cookies-from-browser") + 1] == "chrome"
+    assert "--sleep-requests" in args
+
+
+async def test_bot_check_classified_as_bot_check_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    stderr = "ERROR: [youtube] x: Sign in to confirm you're not a bot. Use --cookies-from-browser"
+    _install_runner(monkeypatch, 1, "", stderr)
+    with pytest.raises(youtube.BotCheckError):
+        await youtube.get_video_metadata("vid00000001")
+
+
+async def test_run_ytdlp_retries_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"n": 0}
+
+    async def fake_once(args: list[str], *, timeout: float = youtube.DEFAULT_TIMEOUT):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return 1, "", "ERROR: Sign in to confirm you're not a bot"
+        return 0, "ok", ""
+
+    monkeypatch.setattr(youtube, "_run_ytdlp_once", fake_once)
+    code, stdout, _stderr = await youtube._run_ytdlp(["x"], backoff=0)
+    assert code == 0
+    assert stdout == "ok"
+    assert calls["n"] == 2
+
+
+async def test_run_ytdlp_gives_up_after_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"n": 0}
+
+    async def fake_once(args: list[str], *, timeout: float = youtube.DEFAULT_TIMEOUT):
+        calls["n"] += 1
+        return 1, "", "ERROR: Sign in to confirm you're not a bot"
+
+    monkeypatch.setattr(youtube, "_run_ytdlp_once", fake_once)
+    code, _stdout, stderr = await youtube._run_ytdlp(["x"], retries=2, backoff=0)
+    assert code == 1
+    assert calls["n"] == 3  # initial attempt plus two retries
+    assert youtube._is_bot_check(stderr)
+
+
+async def test_run_ytdlp_does_not_retry_other_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"n": 0}
+
+    async def fake_once(args: list[str], *, timeout: float = youtube.DEFAULT_TIMEOUT):
+        calls["n"] += 1
+        return 1, "", "ERROR: Private video"
+
+    monkeypatch.setattr(youtube, "_run_ytdlp_once", fake_once)
+    code, _stdout, _stderr = await youtube._run_ytdlp(["x"], retries=2, backoff=0)
+    assert code == 1
+    assert calls["n"] == 1  # no retry for non-bot-check failures

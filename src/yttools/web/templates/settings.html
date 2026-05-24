@@ -75,6 +75,35 @@
     </template>
   </div>
 
+  <div class="border border-zinc-200 dark:border-zinc-800 rounded p-4 space-y-3">
+    <div class="font-medium">YouTube fetching</div>
+    <p class="text-xs text-zinc-500 dark:text-zinc-400">
+      Cookies clear YouTube's "confirm you're not a bot" gate when fetching.
+      Pick a browser to read your logged-in cookies from, or point to an
+      exported cookies.txt. The browser source wins if both are set.
+    </p>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">Cookies from browser</span>
+        <select x-model="youtube.cookies_from_browser"
+                class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+          <option value="">none</option>
+          <template x-for="b in browsers" :key="b"><option :value="b" x-text="b"></option></template>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">Cookies file</span>
+        <input type="text" x-model="youtube.cookies_file" placeholder="~/.yttools/cookies.txt"
+               class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 font-mono">
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">Sleep between requests (s)</span>
+        <input type="number" min="0" step="0.5" x-model.number="youtube.sleep_requests"
+               class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+      </label>
+    </div>
+  </div>
+
   <div class="flex items-center gap-3">
     <button @click="save()"
             class="rounded bg-accent px-4 py-2 text-white text-sm font-medium">Save changes</button>

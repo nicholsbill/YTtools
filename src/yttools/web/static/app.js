@@ -200,6 +200,8 @@ function settingsPanel(currentDefault) {
     providers: [],
     defaultProvider: currentDefault || "ollama",
     ollamaBaseUrl: "http://localhost:11434",
+    browsers: ["chrome", "chromium", "firefox", "safari", "brave", "edge", "opera", "vivaldi"],
+    youtube: { cookies_from_browser: "", cookies_file: "", sleep_requests: 1.0 },
     saved: false,
     statusGlyph(provider) {
       return provider.available ? "●" : "○";
@@ -209,6 +211,7 @@ function settingsPanel(currentDefault) {
       this.providers.forEach((p) => {
         if (!p.api_key) p.api_key = "";
       });
+      this.youtube = await (await fetch("/api/youtube-settings")).json();
     },
     async test(name) {
       const health = await (await fetch(`/api/providers/${name}/test`, { method: "POST" })).json();
@@ -235,6 +238,9 @@ function settingsPanel(currentDefault) {
           default_provider: this.defaultProvider,
           ollama_base_url: this.ollamaBaseUrl,
           providers,
+          youtube_cookies_from_browser: this.youtube.cookies_from_browser,
+          youtube_cookies_file: this.youtube.cookies_file,
+          youtube_sleep_requests: this.youtube.sleep_requests,
         }),
       });
       this.saved = true;

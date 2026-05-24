@@ -133,6 +133,25 @@ def test_settings_save_does_not_write_env_keys(
     assert "sk-secret-from-env" not in config_text
 
 
+def test_youtube_settings_roundtrip(client: TestClient, tmp_home: Path) -> None:
+    initial = client.get("/api/youtube-settings").json()
+    assert initial["cookies_from_browser"] == ""
+    assert initial["sleep_requests"] == 1.0
+
+    saved = client.post(
+        "/api/settings",
+        json={"youtube_cookies_from_browser": "chrome", "youtube_sleep_requests": 2.0},
+    )
+    assert saved.json() == {"saved": True}
+
+    updated = client.get("/api/youtube-settings").json()
+    assert updated["cookies_from_browser"] == "chrome"
+    assert updated["sleep_requests"] == 2.0
+    assert 'cookies_from_browser = "chrome"' in (tmp_home / "config.toml").read_text(
+        encoding="utf-8"
+    )
+
+
 def test_start_fetch_returns_job_id(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_runner(args: list[str], *, timeout: float = youtube.DEFAULT_TIMEOUT):
         return 0, "", "ERROR: Private video"

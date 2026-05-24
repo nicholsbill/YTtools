@@ -6,6 +6,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Fetch can authenticate to YouTube with cookies to clear the "sign in to
+  confirm you're not a bot" gate. Configure `youtube.cookies_from_browser` or
+  `youtube.cookies_file` (browser wins if both set) and `youtube.sleep_requests`
+  from the Settings page or `yttools config set`.
+
+### Changed
+
+- Fetch retries the bot-check gate with backoff and sleeps briefly between
+  yt-dlp requests, recovering most intermittent failures without setup.
+- The default fetch concurrency dropped from 3 to 2 parallel videos to reduce
+  the chance of being flagged as a bot.
+
 ## [0.1.0] - 2026-05-24
 
 First public release: the storage layer, the Fetch tool, and the Search tool.

@@ -32,8 +32,28 @@ class PathsConfig(BaseModel):
 
 
 class FetchConfig(BaseModel):
-    concurrent_videos: int = 3
+    # Two parallel downloads by default: enough to be quick, low enough to avoid
+    # tripping YouTube's anti-bot rate limiting.
+    concurrent_videos: int = 2
     preferred_caption_lang: str = "en"
+
+
+class YouTubeConfig(BaseModel):
+    """Options for talking to YouTube through yt-dlp.
+
+    Cookies clear YouTube's "sign in to confirm you're not a bot" gate. Supply
+    either a browser to read cookies from or a path to an exported cookies.txt;
+    if both are set, the browser source wins.
+    """
+
+    # Browser to read logged-in cookies from: chrome, firefox, safari, brave,
+    # edge, chromium, opera, vivaldi. Empty disables it.
+    cookies_from_browser: str = ""
+    # Path to an exported Netscape-format cookies.txt. Empty disables it.
+    cookies_file: str = ""
+    # Seconds yt-dlp waits between requests. A small delay reduces the chance of
+    # being flagged as a bot. Set to 0 to disable.
+    sleep_requests: float = 1.0
 
 
 class OllamaConfig(BaseModel):
@@ -71,6 +91,7 @@ class ServerConfig(BaseModel):
 class Settings(BaseModel):
     paths: PathsConfig = Field(default_factory=PathsConfig)
     fetch: FetchConfig = Field(default_factory=FetchConfig)
+    youtube: YouTubeConfig = Field(default_factory=YouTubeConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
 
@@ -212,5 +233,9 @@ def _coerce_value(value: str) -> Any:
         return lowered == "true"
     try:
         return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
     except ValueError:
         return value

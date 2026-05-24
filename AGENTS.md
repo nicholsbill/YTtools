@@ -104,6 +104,14 @@ Record non-obvious choices here as they are made.
   incompatibility disables vector features rather than breaking the schema.
 - **Caption source:** yt-dlp output does not reliably distinguish manual from
   auto captions, so transcripts are stored with `is_auto_generated=True`.
+- **YouTube bot gate:** YouTube intermittently answers with "sign in to confirm
+  you're not a bot". `core/youtube.py` classifies this as `BotCheckError`, and
+  `_run_ytdlp` retries it with linear backoff (`_run_ytdlp_once` is the single,
+  non-retrying call). `YouTubeOptions` carries cookie and `--sleep-requests`
+  flags into every invocation, built from the `[youtube]` config section by
+  `fetch.youtube_options_from_settings`. Cookies are the reliable fix; the
+  browser source wins over a cookies file when both are set. Default fetch
+  concurrency is 2 for the same reason.
 - **Settings save:** the web `/api/settings` handler writes through the raw config
   file (`config.set_config_value`), never through env-resolved `Settings`, so an
   API key supplied via an environment variable is never copied to `config.toml`.

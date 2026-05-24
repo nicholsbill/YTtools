@@ -18,6 +18,28 @@ yttools fetch URL --refresh --lang en
   or the stored copy is more than seven days old.
 - Private, deleted, members-only, and live videos are logged and skipped.
 
+### When YouTube asks you to "confirm you're not a bot"
+
+YouTube sometimes gates unauthenticated requests with `Sign in to confirm
+you're not a bot`. Fetch already retries the gated request a couple of times and
+sleeps briefly between requests, which clears most intermittent cases. If it
+keeps happening, supply cookies so requests are authenticated. Set either in the
+Settings page or from the CLI:
+
+```bash
+# Read cookies from a logged-in browser (chrome, firefox, safari, brave, edge, ...)
+yttools config set youtube.cookies_from_browser chrome
+
+# Or point to an exported Netscape-format cookies.txt
+yttools config set youtube.cookies_file ~/.yttools/cookies.txt
+
+# Tune the politeness delay (seconds between requests; 0 disables it)
+yttools config set youtube.sleep_requests 1.5
+```
+
+If both cookie sources are set, the browser source wins. Lowering
+`fetch.concurrent_videos` (default 2) also reduces the chance of being flagged.
+
 ## Search (v0.1.0)
 
 Full-text search across every stored transcript, ranked by BM25.

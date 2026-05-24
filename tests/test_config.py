@@ -16,7 +16,10 @@ def test_defaults_match_spec(tmp_home: Path) -> None:
     settings = load_settings()
     assert settings.llm.default_provider == "ollama"
     assert settings.llm.default_model == "llama3.1:8b"
-    assert settings.fetch.concurrent_videos == 3
+    assert settings.fetch.concurrent_videos == 2
+    assert settings.youtube.cookies_from_browser == ""
+    assert settings.youtube.cookies_file == ""
+    assert settings.youtube.sleep_requests == 1.0
     assert settings.server.port == 8765
     assert settings.server.host == "127.0.0.1"
     assert settings.server.open_browser is True
@@ -86,9 +89,17 @@ def test_set_coerces_bool_and_int(tmp_home: Path) -> None:
     assert settings.fetch.concurrent_videos == 8
 
 
+def test_set_coerces_float(tmp_home: Path) -> None:
+    config_module.set_config_value("youtube.sleep_requests", "1.5")
+    config_module.set_config_value("youtube.cookies_from_browser", "chrome")
+    settings = load_settings()
+    assert settings.youtube.sleep_requests == 1.5
+    assert settings.youtube.cookies_from_browser == "chrome"
+
+
 def test_dumps_toml_roundtrips_through_loader() -> None:
     settings = Settings()
     text = dumps_toml(settings.model_dump())
     assert "[llm.ollama]" in text
     assert 'base_url = "http://localhost:11434"' in text
-    assert "concurrent_videos = 3" in text
+    assert "concurrent_videos = 2" in text

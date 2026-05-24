@@ -148,7 +148,7 @@ async def test_no_captions_still_saves_video(
 async def test_unavailable_videos_are_skipped(
     db: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: Exception
 ) -> None:
-    async def raise_error(video_id: str):
+    async def raise_error(video_id: str, *, options: object = None):
         raise error
 
     monkeypatch.setattr(youtube, "get_video_metadata", raise_error)
@@ -213,6 +213,28 @@ async def test_mixed_input_channel_and_video(
     assert summary.total == 4
     assert summary.done == 4
     assert db.count_videos() == 4
+
+
+async def test_youtube_options_passed_to_ytdlp(
+    db: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[list[str]] = []
+
+    async def runner(args: list[str], *, timeout: float = youtube.DEFAULT_TIMEOUT):
+        seen.append(args)
+        return 0, json.dumps({"id": "dQw4w9WgXcQ", "title": "x", "live_status": "not_live"}), ""
+
+    monkeypatch.setattr(youtube, "_run_ytdlp", runner)
+    options = youtube.YouTubeOptions(cookies_from_browser="firefox", sleep_requests=1.0)
+    job = FetchJob(
+        db,
+        ["dQw4w9WgXcQ"],
+        FetchConfig(include_transcripts=False),
+        captions_dir=tmp_path / "c",
+        youtube_options=options,
+    )
+    await job.run()
+    assert any("--cookies-from-browser" in args for args in seen)
 
 
 async def test_cancel_before_run_processes_nothing(

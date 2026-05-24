@@ -19,6 +19,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from yttools.config import Settings
 from yttools.core import youtube
 from yttools.core.db import Database
 from yttools.core.models import Playlist, Transcript, VideoFetchState, VideoStub
@@ -37,13 +38,22 @@ logger = logging.getLogger(__name__)
 STALE_AFTER_DAYS = 7
 
 
+def youtube_options_from_settings(settings: Settings) -> youtube.YouTubeOptions:
+    """Build :class:`youtube.YouTubeOptions` from the ``[youtube]`` config section."""
+    return youtube.YouTubeOptions(
+        cookies_from_browser=settings.youtube.cookies_from_browser,
+        cookies_file=settings.youtube.cookies_file,
+        sleep_requests=settings.youtube.sleep_requests,
+    )
+
+
 class FetchConfig(BaseModel):
     """Options controlling a fetch run."""
 
     include_transcripts: bool = True
     languages: list[str] = Field(default_factory=lambda: ["en"])
     force_refresh: bool = False
-    concurrent_videos: int = 3
+    concurrent_videos: int = 2
 
 
 class FetchResultRow(BaseModel):
@@ -92,6 +102,7 @@ class FetchJob:
         job_id: str | None = None,
         bus: ProgressBus | None = None,
         captions_dir: Path | None = None,
+        youtube_options: youtube.YouTubeOptions | None = None,
     ) -> None:
         self.db = database
         self.urls = urls
@@ -99,6 +110,7 @@ class FetchJob:
         self.job_id = job_id or uuid.uuid4().hex
         self.bus = bus or get_bus()
         self.captions_dir = captions_dir or (Path.home() / ".yttools" / "captions")
+        self.youtube_options = youtube_options
         self._cancelled = asyncio.Event()
         self._counters = _Counters()
         self._completed = 0
@@ -155,14 +167,14 @@ class FetchJob:
         if isinstance(parsed, VideoURL):
             return [_QueueItem(stub=VideoStub(id=parsed.video_id))]
         if isinstance(parsed, ChannelURL):
-            stubs = await youtube.list_channel_videos(parsed)
+            stubs = await youtube.list_channel_videos(parsed, options=self.youtube_options)
             return [_QueueItem(stub=stub) for stub in stubs]
         if isinstance(parsed, PlaylistURL):
             return await self._expand_playlist(parsed)
         return []
 
     async def _expand_playlist(self, parsed: PlaylistURL) -> list[_QueueItem]:
-        stubs = await youtube.list_playlist_videos(parsed.playlist_id)
+        stubs = await youtube.list_playlist_videos(parsed.playlist_id, options=self.youtube_options)
         await asyncio.to_thread(
             self.db.upsert_playlist,
             Playlist(id=parsed.playlist_id, title=parsed.playlist_id, video_count=len(stubs)),
@@ -208,7 +220,7 @@ class FetchJob:
     async def _fetch_one(self, item: _QueueItem) -> None:
         video_id = item.stub.id
         await self._emit_state(video_id, "fetching_metadata", title=item.stub.title)
-        metadata = await youtube.get_video_metadata(video_id)
+        metadata = await youtube.get_video_metadata(video_id, options=self.youtube_options)
 
         channel = metadata.to_channel()
         if channel is not None:
@@ -225,7 +237,10 @@ class FetchJob:
 
         await self._emit_state(video_id, "fetching_transcript", title=metadata.title)
         vtt_path = await youtube.download_captions(
-            video_id, self.captions_dir, languages=self.config.languages
+            video_id,
+            self.captions_dir,
+            languages=self.config.languages,
+            options=self.youtube_options,
         )
         if vtt_path is None:
             await self._record(

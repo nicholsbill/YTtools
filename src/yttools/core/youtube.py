@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,41 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 120.0
 LISTING_TIMEOUT = 600.0
 YTDLP_COMMAND: list[str] = [sys.executable, "-m", "yt_dlp"]
+
+# When YouTube serves its anti-bot gate, the request is retried a few times with
+# linear backoff. The gate is intermittent, so a retry usually clears it; cookies
+# (see ``YouTubeOptions``) clear it reliably.
+BOT_CHECK_RETRIES = 2
+BOT_CHECK_BACKOFF = 5.0
+
+
+@dataclass(frozen=True)
+class YouTubeOptions:
+    """Per-call yt-dlp options for authentication and rate limiting.
+
+    ``cookies_from_browser`` and ``cookies_file`` both clear YouTube's bot gate;
+    when both are set the browser source takes precedence. ``sleep_requests`` is
+    the delay (seconds) yt-dlp waits between requests.
+    """
+
+    cookies_from_browser: str = ""
+    cookies_file: str = ""
+    sleep_requests: float = 0.0
+
+    def extra_args(self) -> list[str]:
+        """Build the yt-dlp flags these options imply."""
+        args: list[str] = []
+        if self.cookies_from_browser:
+            args += ["--cookies-from-browser", self.cookies_from_browser]
+        elif self.cookies_file:
+            args += ["--cookies", str(Path(self.cookies_file).expanduser())]
+        if self.sleep_requests > 0:
+            args += ["--sleep-requests", f"{self.sleep_requests:g}"]
+        return args
+
+
+def _extra_args(options: YouTubeOptions | None) -> list[str]:
+    return options.extra_args() if options else []
 
 
 class YouTubeError(RuntimeError):
@@ -44,8 +80,28 @@ class LiveStreamError(YouTubeError):
     """The video is a live stream in progress or scheduled."""
 
 
-async def _run_ytdlp(args: list[str], *, timeout: float = DEFAULT_TIMEOUT) -> tuple[int, str, str]:
-    """Run yt-dlp with the given arguments and return (returncode, stdout, stderr)."""
+class BotCheckError(YouTubeError):
+    """YouTube served its "sign in to confirm you're not a bot" gate.
+
+    Resolved by supplying cookies via :class:`YouTubeOptions`. Raised only after
+    the built-in retries are exhausted.
+    """
+
+
+# Matched case-insensitively against stderr. Kept apostrophe-free so the
+# typographic apostrophe in yt-dlp's message does not matter.
+_BOT_CHECK_MARKERS = ("sign in to confirm", "not a bot", "confirm you")
+
+
+def _is_bot_check(stderr: str) -> bool:
+    lowered = stderr.lower()
+    return any(marker in lowered for marker in _BOT_CHECK_MARKERS)
+
+
+async def _run_ytdlp_once(
+    args: list[str], *, timeout: float = DEFAULT_TIMEOUT
+) -> tuple[int, str, str]:
+    """Run yt-dlp once and return (returncode, stdout, stderr)."""
     process = await asyncio.create_subprocess_exec(
         *YTDLP_COMMAND,
         *args,
@@ -65,8 +121,28 @@ async def _run_ytdlp(args: list[str], *, timeout: float = DEFAULT_TIMEOUT) -> tu
     )
 
 
+async def _run_ytdlp(
+    args: list[str],
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+    retries: int = BOT_CHECK_RETRIES,
+    backoff: float = BOT_CHECK_BACKOFF,
+) -> tuple[int, str, str]:
+    """Run yt-dlp, retrying with linear backoff when the bot gate is hit."""
+    attempt = 0
+    while True:
+        code, stdout, stderr = await _run_ytdlp_once(args, timeout=timeout)
+        if code == 0 or attempt >= retries or not _is_bot_check(stderr):
+            return code, stdout, stderr
+        attempt += 1
+        logger.debug("bot check tripped; retrying yt-dlp (attempt %d of %d)", attempt, retries)
+        await asyncio.sleep(backoff * attempt)
+
+
 def _classify_error(stderr: str) -> YouTubeError:
     lowered = stderr.lower()
+    if _is_bot_check(stderr):
+        return BotCheckError(stderr.strip())
     if "members-only" in lowered or "join this channel" in lowered:
         return MembersOnlyError(stderr.strip())
     if "private video" in lowered:
@@ -142,9 +218,11 @@ def _metadata_from_json(data: dict[str, Any]) -> VideoMetadata:
     )
 
 
-async def list_channel_videos(channel: ChannelURL, *, limit: int | None = None) -> list[VideoStub]:
+async def list_channel_videos(
+    channel: ChannelURL, *, limit: int | None = None, options: YouTubeOptions | None = None
+) -> list[VideoStub]:
     """List a channel's uploads as lightweight stubs via a flat listing."""
-    args = ["--flat-playlist", "--dump-json", "--no-warnings"]
+    args = ["--flat-playlist", "--dump-json", "--no-warnings", *_extra_args(options)]
     if limit is not None:
         args += ["--playlist-end", str(limit)]
     args.append(channel.listing_target())
@@ -154,9 +232,11 @@ async def list_channel_videos(channel: ChannelURL, *, limit: int | None = None) 
     return _parse_stub_lines(stdout)
 
 
-async def list_playlist_videos(playlist_id: str, *, limit: int | None = None) -> list[VideoStub]:
+async def list_playlist_videos(
+    playlist_id: str, *, limit: int | None = None, options: YouTubeOptions | None = None
+) -> list[VideoStub]:
     """List a playlist's videos as lightweight stubs via a flat listing."""
-    args = ["--flat-playlist", "--dump-json", "--no-warnings"]
+    args = ["--flat-playlist", "--dump-json", "--no-warnings", *_extra_args(options)]
     if limit is not None:
         args += ["--playlist-end", str(limit)]
     args.append(f"https://www.youtube.com/playlist?list={playlist_id}")
@@ -178,13 +258,22 @@ def _parse_stub_lines(stdout: str) -> list[VideoStub]:
     return stubs
 
 
-async def get_video_metadata(video_id: str) -> VideoMetadata:
+async def get_video_metadata(
+    video_id: str, *, options: YouTubeOptions | None = None
+) -> VideoMetadata:
     """Fetch full metadata for a single video.
 
     Raises:
-        VideoUnavailableError, MembersOnlyError, LiveStreamError, or YouTubeError.
+        VideoUnavailableError, MembersOnlyError, LiveStreamError, BotCheckError,
+        or YouTubeError.
     """
-    args = ["--dump-single-json", "--skip-download", "--no-warnings", _watch_url(video_id)]
+    args = [
+        "--dump-single-json",
+        "--skip-download",
+        "--no-warnings",
+        *_extra_args(options),
+        _watch_url(video_id),
+    ]
     code, stdout, stderr = await _run_ytdlp(args)
     if code != 0:
         raise _classify_error(stderr)
@@ -200,6 +289,7 @@ async def download_captions(
     output_dir: Path,
     *,
     languages: list[str] | None = None,
+    options: YouTubeOptions | None = None,
 ) -> Path | None:
     """Download a VTT caption file, preferring manual captions then auto-captions.
 
@@ -218,6 +308,7 @@ async def download_captions(
         langs,
         "--sub-format",
         "vtt",
+        *_extra_args(options),
         "-o",
         output_template,
         _watch_url(video_id),

@@ -21,7 +21,7 @@ from yttools.config import load_settings
 from yttools.core import exports
 from yttools.core.db import Database
 from yttools.core.llm import build_provider, build_providers
-from yttools.tools.fetch import FetchConfig, FetchJob
+from yttools.tools.fetch import FetchConfig, FetchJob, youtube_options_from_settings
 from yttools.tools.search import SearchError, SearchFilters, search
 
 router = APIRouter(prefix="/api")
@@ -43,6 +43,10 @@ class SettingsUpdate(BaseModel):
     default_provider: str | None = None
     ollama_base_url: str | None = None
     providers: dict[str, ProviderSettingUpdate] = Field(default_factory=dict)
+    # ``None`` leaves a value untouched; an empty string clears it.
+    youtube_cookies_from_browser: str | None = None
+    youtube_cookies_file: str | None = None
+    youtube_sleep_requests: float | None = None
 
 
 def _db(request: Request) -> Database:
@@ -89,6 +93,7 @@ async def start_fetch(request: Request, payload: FetchRequest) -> dict[str, str]
         config,
         bus=request.app.state.bus,
         captions_dir=settings.home_dir / "captions",
+        youtube_options=youtube_options_from_settings(settings),
     )
     request.app.state.jobs[job.job_id] = job
 
@@ -206,6 +211,16 @@ async def test_provider(request: Request, name: str) -> dict[str, Any]:
     return health.model_dump()
 
 
+@router.get("/youtube-settings")
+async def youtube_settings(request: Request) -> dict[str, Any]:
+    settings = request.app.state.settings
+    return {
+        "cookies_from_browser": settings.youtube.cookies_from_browser,
+        "cookies_file": settings.youtube.cookies_file,
+        "sleep_requests": settings.youtube.sleep_requests,
+    }
+
+
 @router.post("/settings")
 async def save_settings(request: Request, payload: SettingsUpdate) -> dict[str, bool]:
     def apply() -> None:
@@ -218,6 +233,16 @@ async def save_settings(request: Request, payload: SettingsUpdate) -> dict[str, 
                 config_module.set_config_value(f"llm.{name}.api_key", update.api_key)
             if update.default_model:
                 config_module.set_config_value(f"llm.{name}.default_model", update.default_model)
+        if payload.youtube_cookies_from_browser is not None:
+            config_module.set_config_value(
+                "youtube.cookies_from_browser", payload.youtube_cookies_from_browser
+            )
+        if payload.youtube_cookies_file is not None:
+            config_module.set_config_value("youtube.cookies_file", payload.youtube_cookies_file)
+        if payload.youtube_sleep_requests is not None:
+            config_module.set_config_value(
+                "youtube.sleep_requests", str(payload.youtube_sleep_requests)
+            )
 
     await asyncio.to_thread(apply)
     request.app.state.settings = load_settings()

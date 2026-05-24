@@ -73,19 +73,29 @@ def fetch(
     lang: list[str] = typer.Option(["en"], "--lang", help="Preferred caption languages."),
 ) -> None:
     """Download transcripts and metadata for one or more YouTube URLs."""
-    from yttools.tools.fetch import FetchConfig, FetchJob
+    from yttools.tools.fetch import FetchConfig, FetchJob, youtube_options_from_settings
 
-    config = FetchConfig(
-        include_transcripts=not no_transcripts, languages=lang, force_refresh=refresh
-    )
     settings = load_settings()
+    config = FetchConfig(
+        include_transcripts=not no_transcripts,
+        languages=lang,
+        force_refresh=refresh,
+        concurrent_videos=settings.fetch.concurrent_videos,
+    )
 
     async def runner() -> None:
         database = _open_db()
         from yttools.core.progress import get_bus
 
         bus = get_bus()
-        job = FetchJob(database, urls, config, bus=bus, captions_dir=settings.home_dir / "captions")
+        job = FetchJob(
+            database,
+            urls,
+            config,
+            bus=bus,
+            captions_dir=settings.home_dir / "captions",
+            youtube_options=youtube_options_from_settings(settings),
+        )
         queue = await bus.subscribe(job.job_id)
         task = asyncio.ensure_future(job.run())
         while True:
