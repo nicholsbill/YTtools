@@ -10,6 +10,7 @@ Thank you for your interest in YTtools. This guide covers how to contribute code
 - [Code style](#code-style)
 - [Submitting a Pull Request](#submitting-a-pull-request)
 - [Commit message format](#commit-message-format)
+- [Releasing](#releasing)
 - [Reporting bugs](#reporting-bugs)
 - [Requesting features](#requesting-features)
 
@@ -137,6 +138,33 @@ feat(db)!: rename `transcripts.text` to `transcripts.body`
 BREAKING CHANGE: schema migration v3 required. Existing databases
 will be migrated on first startup.
 ```
+
+## Releasing
+
+Releases are automated. Pushing a `vX.Y.Z` tag builds the wheel and sdist,
+publishes them to PyPI through trusted publishing (OIDC, no stored tokens), and
+creates a GitHub release from the changelog. Only maintainers with push access can
+cut a release.
+
+1. Confirm `main` is green in CI.
+2. Bump the version in `src/yttools/version.py` (the single source of truth).
+3. Move the `Unreleased` notes in `CHANGELOG.md` into a new dated `vX.Y.Z` section.
+4. Commit (`chore: release vX.Y.Z`) and push `main`.
+5. Tag and push:
+
+   ```bash
+   git tag -a vX.Y.Z -m "vX.Y.Z — short description"
+   git push origin vX.Y.Z
+   ```
+
+6. Watch the `release.yml` run in the Actions tab through build, publish, and
+   release.
+
+A PyPI version number can never be reused, so the tag and `version.py` must match,
+and a broken release is fixed by shipping the next patch version rather than
+overwriting. The first-time PyPI trusted-publisher setup is a one-off configured
+in the PyPI account settings against this repository, the `release.yml` workflow,
+and the `pypi` environment.
 
 ## Reporting bugs
 
