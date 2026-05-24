@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -24,7 +24,8 @@ from yttools.core import exports
 from yttools.core.db import Database
 from yttools.core.llm import build_provider, build_providers, get_provider
 from yttools.core.progress import ProgressCallback
-from yttools.tools.ask import ask_question, embedding_provider, index_channel
+from yttools.tools.agent import run_agent
+from yttools.tools.ask import embedding_provider, index_channel
 from yttools.tools.blog import BlogLength, generate_blog
 from yttools.tools.compare import compare_channels
 from yttools.tools.fetch import FetchConfig, FetchJob, youtube_options_from_settings
@@ -326,13 +327,15 @@ async def ask_endpoint(request: Request, payload: AskRequest) -> dict[str, str]:
     answer = get_provider(settings)
     database = _db(request)
 
+    hint = ", ".join(payload.channel_ids) or None
+
     async def run(on_progress: ProgressCallback) -> BaseModel:
-        return await ask_question(
+        return await run_agent(
             database,
-            embed,
             answer,
+            embed,
             payload.question,
-            channel_ids=payload.channel_ids or None,
+            channel_hint=hint,
             on_progress=on_progress,
         )
 
@@ -386,7 +389,7 @@ async def cancel_fetch(request: Request, job_id: str) -> dict[str, bool]:
 async def search_endpoint(
     request: Request,
     q: str,
-    channel: list[str] | None = Query(default=None),
+    channel: Annotated[list[str] | None, Query()] = None,
     published_after: str | None = None,
     published_before: str | None = None,
     min_minutes: float | None = None,

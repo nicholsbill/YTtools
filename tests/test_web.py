@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -325,12 +326,31 @@ class _FakeEmbed:
         return [[1.0, 0.0, 1.0] for _ in texts]
 
 
+class _ScriptedProvider:
+    name = "fake"
+    default_model = "fake-1"
+
+    def __init__(self, responses: list[str]) -> None:
+        self._responses = responses
+        self.calls = 0
+
+    async def complete(self, prompt: str, **kwargs: object) -> str:
+        response = self._responses[min(self.calls, len(self._responses) - 1)]
+        self.calls += 1
+        return response
+
+
 def test_ask_index_and_query(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed(client)
     monkeypatch.setattr("yttools.web.routes.api.embedding_provider", lambda settings: _FakeEmbed())
-    monkeypatch.setattr(
-        "yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("Answer [1].")
+    scripted = _ScriptedProvider(
+        [
+            json.dumps({"tool": "content_search", "args": {"query": "what is this"}}),
+            json.dumps({"answer": "It covers machine learning [1]."}),
+        ]
     )
+    monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: scripted)
+
     indexed = _run_job(client, "/api/ask/index", {"channel_id": "UC_x"})
     assert indexed["status"] == "done"
     assert indexed["result"]["chunks_indexed"] >= 1
@@ -342,15 +362,24 @@ def test_ask_index_and_query(client: TestClient, monkeypatch: pytest.MonkeyPatch
     assert answered["status"] == "done"
     data = answered["result"]
     assert data["citations"]
+    assert data["steps"]  # a tool was used
     assert "](https://www.youtube.com/watch?v=vid00000001" in data["answer"]
 
 
-def test_ask_without_index_errors(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ask_answers_without_index(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed(client)
     monkeypatch.setattr("yttools.web.routes.api.embedding_provider", lambda settings: _FakeEmbed())
-    monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("x"))
-    entry = _run_job(client, "/api/ask", {"question": "q", "channel_ids": ["UC_x"]})
-    assert entry["status"] == "error"
+    scripted = _ScriptedProvider(
+        [
+            json.dumps({"tool": "channel_stats", "args": {"channel": "UC_x"}}),
+            json.dumps({"answer": "That channel has 1 video."}),
+        ]
+    )
+    monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: scripted)
+    # No index built; a metadata question still completes via the data tools.
+    entry = _run_job(client, "/api/ask", {"question": "how many videos?", "channel_ids": ["UC_x"]})
+    assert entry["status"] == "done"
+    assert "1 video" in entry["result"]["answer"]
 
 
 def test_cancel_unknown_job_returns_404(client: TestClient) -> None:

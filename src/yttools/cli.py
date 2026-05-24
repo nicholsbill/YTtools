@@ -363,23 +363,24 @@ def ask_query(
     question: str = typer.Argument(..., help="The question to answer."),
     channel: str | None = typer.Option(None, "--channel", help="Restrict to a channel id."),
 ) -> None:
-    """Answer a question from indexed transcripts, with citations."""
+    """Answer a question about your videos, using tools over the local data."""
     from yttools.core.llm import get_provider
-    from yttools.tools.ask import AskError, ask_question, embedding_provider
+    from yttools.tools.agent import AgentError, run_agent
+    from yttools.tools.ask import embedding_provider
 
     settings = load_settings()
     database = _open_db()
     try:
         result = asyncio.run(
-            ask_question(
+            run_agent(
                 database,
-                embedding_provider(settings),
                 get_provider(settings),
+                embedding_provider(settings),
                 question,
-                channel_ids=[channel] if channel else None,
+                channel_hint=channel,
             )
         )
-    except AskError as error:
+    except AgentError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from None
     finally:

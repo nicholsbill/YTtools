@@ -8,6 +8,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Ask is now an analysis agent, not just retrieval. The model drives a JSON tool
+  loop over your data — it can search and count videos, pull per-video and
+  per-channel stats, compare videos, and search transcript content — so it can
+  answer questions like "how many steak challenges did each channel do?" or
+  "why did one video get more views than another?" with figures computed from
+  the database (not guessed). The UI shows the steps it took. Works with any
+  provider via JSON mode; metadata questions work without an embedding index.
+
 - Video stats are now visible and exportable. Fetch already stored view and like
   counts; this adds `comment_count`, shows views/likes/comments in search results
   and the transcript view, and includes a stats header in the `.txt` and `.md`

@@ -131,6 +131,13 @@ Record non-obvious choices here as they are made.
   the active job id per tool in `localStorage` to reconnect after navigation.
   `app.state.job_tasks` maps job id to the task so `POST /api/jobs/{id}/cancel`
   can cancel it; the runner catches `CancelledError` and records "cancelled".
+- **Ask agent:** `tools/agent.py` drives a JSON tool loop (no native
+  tool-calling): the model returns `{"tool":...}` or `{"answer":...}` as JSON
+  (works on every provider via JSON mode), `_Toolbox` runs read-only DB queries,
+  results feed back, repeat up to `_MAX_STEPS`. Figures come from SQLite, not the
+  model. `content_search` reuses `ask.retrieve_chunks` (embeddings); the other
+  tools are metadata-only so analytics questions need no index. `/api/ask` and
+  the CLI `ask query` call `run_agent`; `ask_question` (plain RAG) is retained.
 - **`--ignore-no-formats-error`:** the metadata and caption calls pass this flag.
   Even with `--skip-download`, yt-dlp runs media format selection, and for some
   videos/clients it aborts with "Requested format is not available". We only

@@ -49,6 +49,7 @@ class Citation(BaseModel):
 class AskResult(BaseModel):
     answer: str
     citations: list[Citation] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list)
 
 
 class IndexResult(BaseModel):
@@ -164,6 +165,29 @@ async def index_channel(
     )
 
 
+async def retrieve_chunks(
+    database: Database,
+    embed_provider: LLMProvider,
+    question: str,
+    channel_ids: list[str] | None,
+    top_k: int = _TOP_K,
+    top_n: int = _TOP_N,
+) -> list[tuple[float, dict[str, Any]]]:
+    """Embed the question and return the top reranked chunk rows."""
+    rows = database.list_chunk_embeddings(channel_ids)
+    if not rows:
+        raise AskError("Nothing is indexed for that selection yet. Index a channel first.")
+    try:
+        query_vectors = await embed_provider.embed([question])
+    except LLMError as error:
+        raise AskError(f"Embedding failed (is Ollama running?): {error}") from error
+    if not query_vectors:
+        raise AskError("The embedding model returned no vector")
+    scored = [(_cosine(query_vectors[0], row["embedding"]), row) for row in rows]
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return _rerank(scored[:top_k])[:top_n]
+
+
 _SYSTEM = (
     "You answer questions using only the numbered sources provided. Cite every "
     "claim with its source number in brackets, like [1] or [2][3]. If the sources "
@@ -186,22 +210,9 @@ async def ask_question(
     """Answer a question against indexed chunks with citations."""
     if not question.strip():
         raise AskError("Ask a question")
-    rows = database.list_chunk_embeddings(channel_ids)
-    if not rows:
-        raise AskError("Nothing is indexed for that selection yet. Index a channel first.")
     await report(on_progress, "Embedding the question")
-    try:
-        query_vectors = await embed_provider.embed([question])
-    except LLMError as error:
-        raise AskError(f"Embedding failed (is Ollama running?): {error}") from error
-    if not query_vectors:
-        raise AskError("The embedding model returned no vector")
-    query_vector = query_vectors[0]
-
+    top = await retrieve_chunks(database, embed_provider, question, channel_ids, top_k, top_n)
     await report(on_progress, "Retrieving relevant moments")
-    scored = [(_cosine(query_vector, row["embedding"]), row) for row in rows]
-    scored.sort(key=lambda item: item[0], reverse=True)
-    top = _rerank(scored[:top_k])[:top_n]
 
     blocks: list[str] = []
     citations: list[Citation] = []

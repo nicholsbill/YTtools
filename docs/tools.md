@@ -134,22 +134,30 @@ yttools timeline CHANNEL_ID --mode specific --topic rust --topic "web assembly"
 
 ## Ask
 
-Local retrieval-augmented question answering over a channel.
+An analysis agent over your local data. The model is given read-only tools and
+runs a short loop — calling tools, reading the results, and answering — so it can
+do counts, stats, comparisons, and content lookups, with figures computed from
+the database rather than guessed.
 
 ```bash
-yttools ask index CHANNEL_ID                 # build the embedding index (Ollama)
-yttools ask query "what does the host think about X?" --channel CHANNEL_ID
+yttools ask index CHANNEL_ID                 # build the content index (Ollama)
+yttools ask query "how many steak challenges did each channel do?"
+yttools ask query "why did one video get more views than another?"
 ```
 
-- Indexing chunks and embeds each transcript locally with Ollama and stores the
-  vectors in `chunk_embeddings`. Re-running skips already-indexed videos unless
-  `--force` is passed.
-- A query embeds the question, retrieves the nearest chunks (cosine similarity,
-  reranked by recency), and returns an answer that cites its sources; each `[n]`
-  marker links to the moment it came from.
-- The embedding step always runs locally (Ollama); only the answer step uses the
-  configured default provider, so switching providers does not require
-  re-indexing.
+- **Tools the agent can call:** `list_channels`, `search_videos` (search +
+  count, optionally per channel), `channel_stats` (totals, averages, top by
+  views), `compare_videos` (side-by-side stats + transcript gist), and
+  `content_search` (timestamped transcript passages, used for "what did they
+  say" questions and citations).
+- **Counts and stats are trustworthy** — they come from SQLite, not the model.
+- **Metadata questions need no index** (only `content_search` uses embeddings).
+  Indexing chunks+embeds transcripts locally with Ollama into `chunk_embeddings`;
+  `--force` re-indexes. Only the answering step uses the configured provider, so
+  switching providers does not require re-indexing.
+- **No YouTube analytics** (watch time, CTR, impressions) are available via
+  yt-dlp, so "why did it do better" reasons from views/likes/comments/date/
+  duration/title/content and says it is inferred.
 
 All eight tools now ship. Remaining work is v1.0.0 polish (documentation site,
 coverage, performance, and accessibility passes).

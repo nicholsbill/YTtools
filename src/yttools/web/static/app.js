@@ -694,6 +694,7 @@ function askPanel() {
     answer: "",
     rendered: "",
     citations: [],
+    steps: [],
     clock,
     async loadChannels() {
       try {
@@ -749,6 +750,7 @@ function askPanel() {
       this.progress = "Starting";
       this.answer = "";
       this.citations = [];
+      this.steps = [];
       try {
         const body = { question: this.question };
         if (this.channelId) body.channel_ids = [this.channelId];
@@ -758,6 +760,7 @@ function askPanel() {
           this.answer = data.answer;
           this.rendered = renderMarkdown(data.answer);
           this.citations = data.citations;
+          this.steps = data.steps || [];
         }
       } catch (e) {
         this.error = e.message;
