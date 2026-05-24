@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from yttools.core.db import Database
 from yttools.core.llm import LLMProvider
+from yttools.core.progress import ProgressCallback, report
 from yttools.tools.summarize import ensure_channel_topics
 
 _LABEL_MERGE_RATIO = 0.8
@@ -249,6 +250,7 @@ async def compare_channels(
     channel_ids: list[str],
     *,
     model: str | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> CompareResult:
     """Compare 2-5 channels by topic overlap, vocabulary, and topic timing."""
     unique_ids = list(dict.fromkeys(channel_ids))
@@ -258,15 +260,21 @@ async def compare_channels(
     refs: list[ChannelRef] = []
     channel_labels: dict[str, list[str]] = {}
     channel_text: dict[str, str] = {}
-    for channel_id in unique_ids:
+    for position, channel_id in enumerate(unique_ids, start=1):
         channel = database.get_channel(channel_id)
         if channel is None:
             raise CompareError(f"Channel {channel_id} is not in the database")
         refs.append(ChannelRef(id=channel_id, title=channel.title))
-        await ensure_channel_topics(database, provider, channel_id, model=model)
+        await report(
+            on_progress, f"Preparing topics for {channel.title}", position, len(unique_ids)
+        )
+        await ensure_channel_topics(
+            database, provider, channel_id, model=model, on_progress=on_progress
+        )
         channel_labels[channel_id] = [t.label for t in database.list_topics(channel_id)]
         channel_text[channel_id] = _channel_text(database, channel_id)
 
+    await report(on_progress, "Computing overlap and vocabulary")
     clusters = _cluster_across(channel_labels)
     shared = [c for c in clusters if len(c.channels) >= 2]
     unique_topics: dict[str, list[str]] = {cid: [] for cid in unique_ids}

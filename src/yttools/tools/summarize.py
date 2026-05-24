@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from yttools.core.db import Database
 from yttools.core.llm import LLMError, LLMProvider
 from yttools.core.models import Summary, Topic, Video
+from yttools.core.progress import ProgressCallback, report
 
 SUMMARY_TYPES: tuple[str, ...] = ("overview", "topics", "guests", "cadence")
 
@@ -139,12 +140,15 @@ async def _overview(
     videos: list[Video],
     provider: LLMProvider,
     model: str | None,
+    on_progress: ProgressCallback | None = None,
 ) -> str:
     usable = [v for v in videos if database.transcript_exists(v.id)][:_MAX_VIDEOS]
     if not usable:
         return "No transcripts are available to summarize."
     batch_summaries: list[str] = []
-    for start in range(0, len(usable), _MAP_BATCH):
+    batches = range(0, len(usable), _MAP_BATCH)
+    for batch_number, start in enumerate(batches, start=1):
+        await report(on_progress, f"Overview: batch {batch_number}/{len(batches)}")
         batch = usable[start : start + _MAP_BATCH]
         blocks = [f"Title: {v.title}\n{_excerpt(database, v)}" for v in batch]
         prompt = (
@@ -171,13 +175,15 @@ async def _topics(
     videos: list[Video],
     provider: LLMProvider,
     model: str | None,
+    on_progress: ProgressCallback | None = None,
 ) -> str:
     usable = [v for v in videos if database.transcript_exists(v.id)][:_MAX_VIDEOS]
     if not usable:
         return "No transcripts are available to extract topics from."
     # video_id -> list of raw labels
     per_video: list[tuple[Video, list[str]]] = []
-    for video in usable:
+    for position, video in enumerate(usable, start=1):
+        await report(on_progress, f"Topics: video {position}/{len(usable)}", position, len(usable))
         prompt = (
             'Return JSON {"topics": ["label", ...]} with 3 to 7 short topic labels '
             f"(1-4 words each) for this video.\n\nTitle: {video.title}\n{_excerpt(database, video)}"
@@ -236,11 +242,16 @@ def _cluster_labels(per_video: list[tuple[Video, list[str]]]) -> list[_Cluster]:
 
 
 async def _guests(
-    database: Database, videos: list[Video], provider: LLMProvider, model: str | None
+    database: Database,
+    videos: list[Video],
+    provider: LLMProvider,
+    model: str | None,
+    on_progress: ProgressCallback | None = None,
 ) -> str:
     usable = [v for v in videos if database.transcript_exists(v.id)][:_MAX_VIDEOS]
     guests: list[_Guest] = []
-    for video in usable:
+    for position, video in enumerate(usable, start=1):
+        await report(on_progress, f"Guests: video {position}/{len(usable)}", position, len(usable))
         prompt = (
             'Return JSON {"guests": [{"name": "...", "background": "..."}]} listing any '
             "people interviewed as guests in this video. Return an empty list if it is "
@@ -291,6 +302,7 @@ async def ensure_channel_topics(
     *,
     model: str | None = None,
     force: bool = False,
+    on_progress: ProgressCallback | None = None,
 ) -> None:
     """Extract and persist topics for a channel if it has none yet.
 
@@ -301,7 +313,7 @@ async def ensure_channel_topics(
         return
     videos = database.list_videos(channel_id)
     if videos:
-        await _topics(database, channel_id, videos, provider, model)
+        await _topics(database, channel_id, videos, provider, model, on_progress)
 
 
 # -- orchestration -------------------------------------------------------
@@ -315,6 +327,7 @@ async def summarize_channel(
     summary_types: list[str],
     model: str | None = None,
     force: bool = False,
+    on_progress: ProgressCallback | None = None,
 ) -> SummarizeResult:
     """Generate (or reuse) the requested summary types for a channel."""
     channel = database.get_channel(channel_id)
@@ -334,14 +347,15 @@ async def summarize_channel(
             if cached is not None:
                 sections.append(SummarySection(summary_type=summary_type, content=cached.content))
                 continue
+        await report(on_progress, f"Generating {summary_type}")
         if summary_type == "cadence":
             content = _cadence(videos)
         elif summary_type == "overview":
-            content = await _overview(database, channel.title, videos, provider, model)
+            content = await _overview(database, channel.title, videos, provider, model, on_progress)
         elif summary_type == "topics":
-            content = await _topics(database, channel_id, videos, provider, model)
+            content = await _topics(database, channel_id, videos, provider, model, on_progress)
         else:  # guests
-            content = await _guests(database, videos, provider, model)
+            content = await _guests(database, videos, provider, model, on_progress)
         database.upsert_summary(
             Summary(
                 target_type="channel",

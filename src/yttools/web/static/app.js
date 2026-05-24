@@ -265,6 +265,7 @@ function blogPanel() {
     title: "",
     running: false,
     error: "",
+    progress: "",
     markdown: "",
     rendered: "",
     modelUsed: "",
@@ -275,39 +276,26 @@ function blogPanel() {
       } catch (_) {
         this.videos = [];
       }
+      await resumeInto(this, "blog", (r) => this.apply(r));
+    },
+    apply(result) {
+      this.markdown = result.markdown;
+      this.rendered = renderMarkdown(result.markdown);
+      this.modelUsed = result.model_used || "";
+      this.wordCount = result.word_count || 0;
     },
     async convert() {
       if (!this.videoId) return;
-      this.error = "";
-      this.running = true;
       this.markdown = "";
       this.rendered = "";
       this.wordCount = 0;
-      try {
-        const response = await fetch("/api/blog", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            video_id: this.videoId,
-            tone: this.tone,
-            length: this.length,
-            title: this.title,
-          }),
-        });
-        if (!response.ok) {
-          this.error = (await response.json()).detail || "Conversion failed.";
-          return;
-        }
-        const data = await response.json();
-        this.markdown = data.markdown;
-        this.rendered = renderMarkdown(data.markdown);
-        this.modelUsed = data.model_used || "";
-        this.wordCount = data.word_count || 0;
-      } catch (_) {
-        this.error = "Could not reach the server.";
-      } finally {
-        this.running = false;
-      }
+      await runInto(
+        this,
+        "blog",
+        "/api/blog",
+        { video_id: this.videoId, tone: this.tone, length: this.length, title: this.title },
+        (r) => this.apply(r)
+      );
     },
     download() {
       if (!this.markdown) return;
@@ -326,6 +314,107 @@ function downloadText(text, filename, mime) {
   URL.revokeObjectURL(url);
 }
 
+// --- background AI-tool jobs -------------------------------------------
+// AI tools run server-side as background jobs that keep going if you navigate
+// away. We poll /api/jobs/{id} for live progress and the final result, and
+// remember the active job id per tool so returning to the tab reconnects.
+
+function jobKey(tool) {
+  return `yttools-job-${tool}`;
+}
+
+function formatProgress(progress) {
+  if (!progress) return "";
+  const { message, current, total } = progress;
+  return total ? `${message} (${current}/${total})` : message || "";
+}
+
+function pollJob(tool, jobId, onProgress) {
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(async () => {
+      let entry;
+      try {
+        const response = await fetch(`/api/jobs/${jobId}`);
+        if (!response.ok) {
+          clearInterval(timer);
+          localStorage.removeItem(jobKey(tool));
+          reject(new Error("The job is no longer available."));
+          return;
+        }
+        entry = await response.json();
+      } catch (_) {
+        return; // transient; try again on the next tick
+      }
+      if (onProgress) onProgress(entry.progress);
+      if (entry.status === "done") {
+        clearInterval(timer);
+        localStorage.removeItem(jobKey(tool));
+        resolve(entry.result);
+      } else if (entry.status === "error") {
+        clearInterval(timer);
+        localStorage.removeItem(jobKey(tool));
+        reject(new Error(entry.detail || "The job failed."));
+      }
+    }, 800);
+  });
+}
+
+async function startJob(tool, startUrl, body, onProgress) {
+  const response = await fetch(startUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error((await response.json()).detail || "Could not start the job.");
+  const { job_id: jobId } = await response.json();
+  localStorage.setItem(jobKey(tool), jobId);
+  return pollJob(tool, jobId, onProgress);
+}
+
+async function resumeJob(tool, onProgress) {
+  const jobId = localStorage.getItem(jobKey(tool));
+  if (!jobId) return null;
+  try {
+    const response = await fetch(`/api/jobs/${jobId}`);
+    if (!response.ok) {
+      localStorage.removeItem(jobKey(tool));
+      return null;
+    }
+  } catch (_) {
+    return null;
+  }
+  return pollJob(tool, jobId, onProgress);
+}
+
+// Drive a panel's running/progress/error state through a job, applying the
+// result on success. `self` is the Alpine component; `apply(result)` renders it.
+async function runInto(self, tool, url, body, apply) {
+  self.error = "";
+  self.running = true;
+  self.progress = "Starting";
+  try {
+    apply(await startJob(tool, url, body, (p) => (self.progress = formatProgress(p))));
+  } catch (e) {
+    self.error = e.message;
+  } finally {
+    self.running = false;
+  }
+}
+
+async function resumeInto(self, tool, apply) {
+  if (!localStorage.getItem(jobKey(tool))) return;
+  self.error = "";
+  self.running = true;
+  try {
+    const result = await resumeJob(tool, (p) => (self.progress = formatProgress(p)));
+    if (result) apply(result);
+  } catch (e) {
+    self.error = e.message;
+  } finally {
+    self.running = false;
+  }
+}
+
 function summarizePanel() {
   return {
     channels: [],
@@ -335,6 +424,7 @@ function summarizePanel() {
     force: false,
     running: false,
     error: "",
+    progress: "",
     sections: [],
     render: renderMarkdown,
     async loadChannels() {
@@ -343,31 +433,18 @@ function summarizePanel() {
       } catch (_) {
         this.channels = [];
       }
+      await resumeInto(this, "summarize", (r) => (this.sections = r.sections));
     },
     async run() {
-      this.error = "";
-      this.running = true;
+      if (!this.channelId || !this.types.length) return;
       this.sections = [];
-      try {
-        const response = await fetch("/api/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            channel_id: this.channelId,
-            summary_types: this.types,
-            force: this.force,
-          }),
-        });
-        if (!response.ok) {
-          this.error = (await response.json()).detail || "Failed.";
-          return;
-        }
-        this.sections = (await response.json()).sections;
-      } catch (_) {
-        this.error = "Could not reach the server.";
-      } finally {
-        this.running = false;
-      }
+      await runInto(
+        this,
+        "summarize",
+        "/api/summarize",
+        { channel_id: this.channelId, summary_types: this.types, force: this.force },
+        (r) => (this.sections = r.sections)
+      );
     },
     downloadSection(section) {
       downloadText(section.content, `${this.channelId}-${section.summary_type}.md`, "text/markdown");
@@ -414,6 +491,7 @@ function quotesPanel() {
     regenerate: false,
     running: false,
     error: "",
+    progress: "",
     quotes: [],
     filterType: "",
     clock,
@@ -424,6 +502,7 @@ function quotesPanel() {
       } catch (_) {
         /* leave empty on failure */
       }
+      await resumeInto(this, "quotes", (r) => (this.quotes = r.quotes));
     },
     onSourceChange() {
       this.id = "";
@@ -435,31 +514,17 @@ function quotesPanel() {
     },
     async run() {
       if (!this.id) return;
-      this.error = "";
-      this.running = true;
       this.quotes = [];
-      try {
-        const response = await fetch("/api/quotes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            source: this.source,
-            id: this.id,
-            quote_types: this.types,
-            regenerate: this.regenerate,
-          }),
-        });
-        if (!response.ok) {
-          this.error = (await response.json()).detail || "Failed.";
-          return;
+      await runInto(
+        this,
+        "quotes",
+        "/api/quotes",
+        { source: this.source, id: this.id, quote_types: this.types, regenerate: this.regenerate },
+        (r) => {
+          this.quotes = r.quotes;
+          if (!this.quotes.length) this.error = "No quotes found.";
         }
-        this.quotes = (await response.json()).quotes;
-        if (!this.quotes.length) this.error = "No quotes found.";
-      } catch (_) {
-        this.error = "Could not reach the server.";
-      } finally {
-        this.running = false;
-      }
+      );
     },
     download(fmt) {
       const rows = this.filtered();
@@ -480,6 +545,7 @@ function comparePanel() {
     channelIds: [],
     running: false,
     error: "",
+    progress: "",
     result: null,
     tab: "Topic overlap",
     tabs: ["Topic overlap", "Vocabulary", "Timing"],
@@ -489,6 +555,10 @@ function comparePanel() {
       } catch (_) {
         this.channels = [];
       }
+      await resumeInto(this, "compare", (r) => {
+        this.result = r;
+        this.tab = "Topic overlap";
+      });
     },
     titleOf(id) {
       const known = this.channels.find((c) => c.id === id);
@@ -498,26 +568,11 @@ function comparePanel() {
     },
     async run() {
       if (this.channelIds.length < 2) return;
-      this.error = "";
-      this.running = true;
       this.result = null;
-      try {
-        const response = await fetch("/api/compare", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ channel_ids: this.channelIds }),
-        });
-        if (!response.ok) {
-          this.error = (await response.json()).detail || "Failed.";
-          return;
-        }
-        this.result = await response.json();
+      await runInto(this, "compare", "/api/compare", { channel_ids: this.channelIds }, (r) => {
+        this.result = r;
         this.tab = "Topic overlap";
-      } catch (_) {
-        this.error = "Could not reach the server.";
-      } finally {
-        this.running = false;
-      }
+      });
     },
   };
 }
@@ -536,6 +591,7 @@ function timelinePanel() {
     topicsText: "",
     running: false,
     error: "",
+    progress: "",
     stats: [],
     hasData: false,
     async loadChannels() {
@@ -544,36 +600,29 @@ function timelinePanel() {
       } catch (_) {
         this.channels = [];
       }
+      await resumeInto(this, "timeline", (r) => this.apply(r));
+    },
+    apply(data) {
+      this.stats = data.stats;
+      if (!data.months.length) {
+        this.error = "No data for that selection.";
+        this.hasData = false;
+        return;
+      }
+      this.hasData = true;
+      this.$nextTick(() => this.draw(data));
     },
     async run() {
       if (!this.channelId) return;
-      this.error = "";
-      this.running = true;
       this.hasData = false;
       const topics = this.topicsText.split(",").map((s) => s.trim()).filter(Boolean);
-      try {
-        const response = await fetch("/api/timeline", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ channel_id: this.channelId, mode: this.mode, topics }),
-        });
-        if (!response.ok) {
-          this.error = (await response.json()).detail || "Failed.";
-          return;
-        }
-        const data = await response.json();
-        this.stats = data.stats;
-        if (!data.months.length) {
-          this.error = "No data for that selection.";
-          return;
-        }
-        this.hasData = true;
-        this.$nextTick(() => this.draw(data));
-      } catch (_) {
-        this.error = "Could not reach the server.";
-      } finally {
-        this.running = false;
-      }
+      await runInto(
+        this,
+        "timeline",
+        "/api/timeline",
+        { channel_id: this.channelId, mode: this.mode, topics },
+        (r) => this.apply(r)
+      );
     },
     draw(data) {
       if (!window.Chart) return;
@@ -607,6 +656,7 @@ function askPanel() {
     indexing: false,
     asking: false,
     error: "",
+    progress: "",
     question: "",
     answer: "",
     rendered: "",
@@ -618,7 +668,19 @@ function askPanel() {
       } catch (_) {
         this.channels = [];
       }
-      this.refreshStatus();
+      await this.refreshStatus();
+      // Reconnect to an indexing job still running after navigating away.
+      if (localStorage.getItem(jobKey("ask-index"))) {
+        this.indexing = true;
+        try {
+          await resumeJob("ask-index", (p) => (this.progress = formatProgress(p)));
+          await this.refreshStatus();
+        } catch (e) {
+          this.error = e.message;
+        } finally {
+          this.indexing = false;
+        }
+      }
     },
     async refreshStatus() {
       try {
@@ -632,19 +694,17 @@ function askPanel() {
       if (!this.channelId) return;
       this.error = "";
       this.indexing = true;
+      this.progress = "Starting";
       try {
-        const response = await fetch("/api/ask/index", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ channel_id: this.channelId }),
-        });
-        if (!response.ok) {
-          this.error = (await response.json()).detail || "Indexing failed.";
-          return;
-        }
+        await startJob(
+          "ask-index",
+          "/api/ask/index",
+          { channel_id: this.channelId },
+          (p) => (this.progress = formatProgress(p))
+        );
         await this.refreshStatus();
-      } catch (_) {
-        this.error = "Could not reach the server.";
+      } catch (e) {
+        this.error = e.message;
       } finally {
         this.indexing = false;
       }
@@ -653,26 +713,18 @@ function askPanel() {
       if (!this.question) return;
       this.error = "";
       this.asking = true;
+      this.progress = "Starting";
       this.answer = "";
       this.citations = [];
       try {
         const body = { question: this.question };
         if (this.channelId) body.channel_ids = [this.channelId];
-        const response = await fetch("/api/ask", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (!response.ok) {
-          this.error = (await response.json()).detail || "Failed.";
-          return;
-        }
-        const data = await response.json();
+        const data = await startJob("ask", "/api/ask", body, (p) => (this.progress = formatProgress(p)));
         this.answer = data.answer;
         this.rendered = renderMarkdown(data.answer);
         this.citations = data.citations;
-      } catch (_) {
-        this.error = "Could not reach the server.";
+      } catch (e) {
+        this.error = e.message;
       } finally {
         this.asking = false;
       }

@@ -10,6 +10,8 @@ supplied through the environment are never copied to disk.
 from __future__ import annotations
 
 import asyncio
+import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -21,14 +23,15 @@ from yttools.config import load_settings
 from yttools.core import exports
 from yttools.core.db import Database
 from yttools.core.llm import build_provider, build_providers, get_provider
-from yttools.tools.ask import AskError, ask_question, embedding_provider, index_channel
-from yttools.tools.blog import BlogError, BlogLength, generate_blog
-from yttools.tools.compare import CompareError, compare_channels
+from yttools.core.progress import ProgressCallback
+from yttools.tools.ask import ask_question, embedding_provider, index_channel
+from yttools.tools.blog import BlogLength, generate_blog
+from yttools.tools.compare import compare_channels
 from yttools.tools.fetch import FetchConfig, FetchJob, youtube_options_from_settings
 from yttools.tools.quotes import QuotesError, extract_quotes, load_quotes
 from yttools.tools.search import SearchError, SearchFilters, search
-from yttools.tools.summarize import SummarizeError, summarize_channel
-from yttools.tools.timeline import TimelineError, build_timeline
+from yttools.tools.summarize import summarize_channel
+from yttools.tools.timeline import build_timeline
 
 router = APIRouter(prefix="/api")
 
@@ -139,40 +142,86 @@ async def videos(request: Request, channel: str | None = None) -> list[dict[str,
     return await asyncio.to_thread(collect)
 
 
+JobRunner = Callable[[ProgressCallback], Awaitable[BaseModel]]
+
+
+def _start_job(request: Request, kind: str, run: JobRunner) -> dict[str, str]:
+    """Run an AI tool as a background task that survives client navigation.
+
+    The task records live progress and its final result/error in
+    ``app.state.job_results`` so the UI can poll ``GET /api/jobs/{job_id}``.
+    """
+    job_id = uuid.uuid4().hex
+    registry: dict[str, dict[str, Any]] = request.app.state.job_results
+    registry[job_id] = {
+        "status": "running",
+        "kind": kind,
+        "progress": {"message": "Starting", "current": 0, "total": 0},
+        "result": None,
+        "detail": None,
+    }
+
+    async def on_progress(message: str, current: int, total: int) -> None:
+        registry[job_id]["progress"] = {"message": message, "current": current, "total": total}
+
+    async def runner() -> None:
+        try:
+            result = await run(on_progress)
+            registry[job_id]["result"] = result.model_dump()
+            registry[job_id]["status"] = "done"
+        except Exception as error:  # job boundary: report any failure to the UI
+            registry[job_id]["detail"] = str(error)
+            registry[job_id]["status"] = "error"
+
+    task = asyncio.ensure_future(runner())
+    request.app.state.tasks.add(task)
+    task.add_done_callback(request.app.state.tasks.discard)
+    return {"job_id": job_id}
+
+
+@router.get("/jobs/{job_id}")
+async def job_result(request: Request, job_id: str) -> dict[str, Any]:
+    entry = request.app.state.job_results.get(job_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Unknown job")
+    return dict(entry)
+
+
 @router.post("/blog")
-async def generate_blog_endpoint(request: Request, payload: BlogRequest) -> dict[str, Any]:
-    settings = request.app.state.settings
-    provider = get_provider(settings)
-    try:
-        result = await generate_blog(
-            _db(request),
+async def generate_blog_endpoint(request: Request, payload: BlogRequest) -> dict[str, str]:
+    provider = get_provider(request.app.state.settings)
+    database = _db(request)
+
+    async def run(on_progress: ProgressCallback) -> BaseModel:
+        return await generate_blog(
+            database,
             provider,
             payload.video_id,
             tone=payload.tone or None,
             length=payload.length,
             title_override=payload.title or None,
+            on_progress=on_progress,
         )
-    except BlogError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except NotImplementedError as error:  # provider not wired (defensive)
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return result.model_dump()
+
+    return _start_job(request, "blog", run)
 
 
 @router.post("/summarize")
-async def summarize_endpoint(request: Request, payload: SummarizeRequest) -> dict[str, Any]:
+async def summarize_endpoint(request: Request, payload: SummarizeRequest) -> dict[str, str]:
     provider = get_provider(request.app.state.settings)
-    try:
-        result = await summarize_channel(
-            _db(request),
+    database = _db(request)
+
+    async def run(on_progress: ProgressCallback) -> BaseModel:
+        return await summarize_channel(
+            database,
             provider,
             payload.channel_id,
             summary_types=payload.summary_types,
             force=payload.force,
+            on_progress=on_progress,
         )
-    except (SummarizeError, NotImplementedError) as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return result.model_dump()
+
+    return _start_job(request, "summarize", run)
 
 
 def _resolve_video_ids(database: Database, source: str, source_id: str) -> list[str]:
@@ -182,48 +231,55 @@ def _resolve_video_ids(database: Database, source: str, source_id: str) -> list[
 
 
 @router.post("/quotes")
-async def quotes_endpoint(request: Request, payload: QuotesRequest) -> dict[str, Any]:
+async def quotes_endpoint(request: Request, payload: QuotesRequest) -> dict[str, str]:
     database = _db(request)
     provider = get_provider(request.app.state.settings)
-    video_ids = await asyncio.to_thread(_resolve_video_ids, database, payload.source, payload.id)
-    if not video_ids:
-        raise HTTPException(status_code=400, detail="No videos found for that source")
-    types = payload.quote_types or None
-    try:
+
+    async def run(on_progress: ProgressCallback) -> BaseModel:
+        video_ids = _resolve_video_ids(database, payload.source, payload.id)
+        if not video_ids:
+            raise QuotesError("No videos found for that source")
+        types = payload.quote_types or None
         if not payload.regenerate:
-            existing = await asyncio.to_thread(load_quotes, database, video_ids, types)
+            existing = load_quotes(database, video_ids, types)
             if existing.total:
-                return existing.model_dump()
-        result = await extract_quotes(database, provider, video_ids=video_ids, quote_types=types)
-    except (QuotesError, NotImplementedError) as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return result.model_dump()
+                return existing
+        return await extract_quotes(
+            database, provider, video_ids=video_ids, quote_types=types, on_progress=on_progress
+        )
+
+    return _start_job(request, "quotes", run)
 
 
 @router.post("/compare")
-async def compare_endpoint(request: Request, payload: CompareRequest) -> dict[str, Any]:
+async def compare_endpoint(request: Request, payload: CompareRequest) -> dict[str, str]:
     provider = get_provider(request.app.state.settings)
-    try:
-        result = await compare_channels(_db(request), provider, payload.channel_ids)
-    except (CompareError, NotImplementedError) as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return result.model_dump()
+    database = _db(request)
+
+    async def run(on_progress: ProgressCallback) -> BaseModel:
+        return await compare_channels(
+            database, provider, payload.channel_ids, on_progress=on_progress
+        )
+
+    return _start_job(request, "compare", run)
 
 
 @router.post("/timeline")
-async def timeline_endpoint(request: Request, payload: TimelineRequest) -> dict[str, Any]:
+async def timeline_endpoint(request: Request, payload: TimelineRequest) -> dict[str, str]:
     provider = get_provider(request.app.state.settings)
-    try:
-        result = await build_timeline(
-            _db(request),
+    database = _db(request)
+
+    async def run(on_progress: ProgressCallback) -> BaseModel:
+        return await build_timeline(
+            database,
             provider,
             payload.channel_id,
             mode=payload.mode,
             topics=payload.topics,
+            on_progress=on_progress,
         )
-    except (TimelineError, NotImplementedError) as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return result.model_dump()
+
+    return _start_job(request, "timeline", run)
 
 
 @router.get("/ask/status")
@@ -235,31 +291,36 @@ async def ask_status(request: Request, channel: str | None = None) -> dict[str, 
 
 
 @router.post("/ask/index")
-async def ask_index_endpoint(request: Request, payload: AskIndexRequest) -> dict[str, Any]:
+async def ask_index_endpoint(request: Request, payload: AskIndexRequest) -> dict[str, str]:
     embed = embedding_provider(request.app.state.settings)
-    try:
-        result = await index_channel(_db(request), embed, payload.channel_id, force=payload.force)
-    except AskError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return result.model_dump()
+    database = _db(request)
+
+    async def run(on_progress: ProgressCallback) -> BaseModel:
+        return await index_channel(
+            database, embed, payload.channel_id, force=payload.force, on_progress=on_progress
+        )
+
+    return _start_job(request, "ask-index", run)
 
 
 @router.post("/ask")
-async def ask_endpoint(request: Request, payload: AskRequest) -> dict[str, Any]:
+async def ask_endpoint(request: Request, payload: AskRequest) -> dict[str, str]:
     settings = request.app.state.settings
     embed = embedding_provider(settings)
     answer = get_provider(settings)
-    try:
-        result = await ask_question(
-            _db(request),
+    database = _db(request)
+
+    async def run(on_progress: ProgressCallback) -> BaseModel:
+        return await ask_question(
+            database,
             embed,
             answer,
             payload.question,
             channel_ids=payload.channel_ids or None,
+            on_progress=on_progress,
         )
-    except (AskError, NotImplementedError) as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return result.model_dump()
+
+    return _start_job(request, "ask", run)
 
 
 @router.post("/fetch")

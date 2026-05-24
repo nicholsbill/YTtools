@@ -24,6 +24,7 @@ from yttools.core.db import Database
 from yttools.core.embeddings import chunk_transcript, embed_chunks
 from yttools.core.exports import format_clock, watch_url
 from yttools.core.llm import LLMError, LLMProvider, OllamaProvider
+from yttools.core.progress import ProgressCallback, report
 
 _TOP_K = 20
 _TOP_N = 8
@@ -123,13 +124,17 @@ async def index_channel(
     channel_id: str,
     *,
     force: bool = False,
+    on_progress: ProgressCallback | None = None,
 ) -> IndexResult:
     """Chunk, embed, and store a channel's transcripts."""
     if database.get_channel(channel_id) is None:
         raise AskError(f"Channel {channel_id} is not in the database")
     videos_indexed = 0
     chunks_indexed = 0
-    for video in database.list_videos(channel_id):
+    videos = database.list_videos(channel_id)
+    total = len(videos)
+    for position, video in enumerate(videos, start=1):
+        await report(on_progress, f"Embedding video {position}/{total}", position, total)
         if not force and database.video_is_indexed(video.id):
             continue
         transcript = database.get_transcript(video.id)
@@ -176,6 +181,7 @@ async def ask_question(
     model: str | None = None,
     top_k: int = _TOP_K,
     top_n: int = _TOP_N,
+    on_progress: ProgressCallback | None = None,
 ) -> AskResult:
     """Answer a question against indexed chunks with citations."""
     if not question.strip():
@@ -183,6 +189,7 @@ async def ask_question(
     rows = database.list_chunk_embeddings(channel_ids)
     if not rows:
         raise AskError("Nothing is indexed for that selection yet. Index a channel first.")
+    await report(on_progress, "Embedding the question")
     try:
         query_vectors = await embed_provider.embed([question])
     except LLMError as error:
@@ -191,6 +198,7 @@ async def ask_question(
         raise AskError("The embedding model returned no vector")
     query_vector = query_vectors[0]
 
+    await report(on_progress, "Retrieving relevant moments")
     scored = [(_cosine(query_vector, row["embedding"]), row) for row in rows]
     scored.sort(key=lambda item: item[0], reverse=True)
     top = _rerank(scored[:top_k])[:top_n]
@@ -212,6 +220,7 @@ async def ask_question(
             )
         )
 
+    await report(on_progress, "Answering")
     prompt = f"Question: {question}\n\nSources:\n" + "\n\n".join(blocks)
     try:
         answer = await answer_provider.complete(

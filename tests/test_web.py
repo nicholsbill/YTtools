@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -178,6 +180,23 @@ class _FakeProvider:
         return self._payload
 
 
+def _run_job(
+    client: TestClient, url: str, body: dict[str, Any], *, timeout: float = 5.0
+) -> dict[str, Any]:
+    """Start a background AI job and poll until it reaches a terminal state."""
+    start = client.post(url, json=body)
+    assert start.status_code == 200, start.text
+    job_id = start.json()["job_id"]
+    deadline = time.time() + timeout
+    entry: dict[str, Any] = {}
+    while time.time() < deadline:
+        entry = client.get(f"/api/jobs/{job_id}").json()
+        if entry["status"] != "running":
+            return entry
+        time.sleep(0.02)
+    raise AssertionError(f"job {job_id} did not finish: {entry}")
+
+
 def test_videos_reports_transcript_flag(client: TestClient) -> None:
     _seed(client)
     videos = client.get("/api/videos").json()
@@ -193,31 +212,28 @@ def test_blog_generates_article(client: TestClient, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(
         "yttools.web.routes.api.get_provider", lambda settings: _FakeProvider(payload)
     )
-    response = client.post("/api/blog", json={"video_id": "vid00000001", "length": "short"})
-    assert response.status_code == 200
-    data = response.json()
+    entry = _run_job(client, "/api/blog", {"video_id": "vid00000001", "length": "short"})
+    assert entry["status"] == "done"
+    data = entry["result"]
     assert data["title"] == "My Article"
     assert "## Intro" in data["markdown"]
     assert "watch?v=vid00000001&t=12s" in data["markdown"]
     assert data["word_count"] > 0
 
 
-def test_blog_unknown_video_returns_400(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_blog_unknown_video_errors(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("{}"))
-    response = client.post("/api/blog", json={"video_id": "missing"})
-    assert response.status_code == 400
+    entry = _run_job(client, "/api/blog", {"video_id": "missing"})
+    assert entry["status"] == "error"
+    assert "not in the database" in entry["detail"]
 
 
 def test_summarize_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed(client)
     monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("{}"))
-    response = client.post(
-        "/api/summarize", json={"channel_id": "UC_x", "summary_types": ["cadence"]}
-    )
-    assert response.status_code == 200
-    sections = response.json()["sections"]
+    entry = _run_job(client, "/api/summarize", {"channel_id": "UC_x", "summary_types": ["cadence"]})
+    assert entry["status"] == "done"
+    sections = entry["result"]["sections"]
     assert sections and sections[0]["summary_type"] == "cadence"
 
 
@@ -227,11 +243,11 @@ def test_quotes_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(
         "yttools.web.routes.api.get_provider", lambda settings: _FakeProvider(payload)
     )
-    response = client.post(
-        "/api/quotes", json={"source": "video", "id": "vid00000001", "regenerate": True}
+    entry = _run_job(
+        client, "/api/quotes", {"source": "video", "id": "vid00000001", "regenerate": True}
     )
-    assert response.status_code == 200
-    data = response.json()
+    assert entry["status"] == "done"
+    data = entry["result"]
     assert data["total"] == 1
     assert "watch?v=vid00000001&t=12s" in data["quotes"][0]["url"]
 
@@ -248,9 +264,9 @@ def test_compare_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) -
             Transcript(video_id=f"{cid}_v", language="en", is_auto_generated=True, text=text)
         )
     monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("{}"))
-    response = client.post("/api/compare", json={"channel_ids": ["UC_a", "UC_b"]})
-    assert response.status_code == 200
-    assert len(response.json()["channels"]) == 2
+    entry = _run_job(client, "/api/compare", {"channel_ids": ["UC_a", "UC_b"]})
+    assert entry["status"] == "done"
+    assert len(entry["result"]["channels"]) == 2
 
 
 def test_timeline_specific_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -268,12 +284,13 @@ def test_timeline_specific_endpoint(client: TestClient, monkeypatch: pytest.Monk
         )
     )
     monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("{}"))
-    response = client.post(
+    entry = _run_job(
+        client,
         "/api/timeline",
-        json={"channel_id": "UC_t", "mode": "specific", "topics": ["machine learning"]},
+        {"channel_id": "UC_t", "mode": "specific", "topics": ["machine learning"]},
     )
-    assert response.status_code == 200
-    data = response.json()
+    assert entry["status"] == "done"
+    data = entry["result"]
     assert data["mode"] == "specific"
     assert "2024-03" in data["months"]
 
@@ -292,26 +309,26 @@ def test_ask_index_and_query(client: TestClient, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         "yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("Answer [1].")
     )
-    indexed = client.post("/api/ask/index", json={"channel_id": "UC_x"})
-    assert indexed.status_code == 200
-    assert indexed.json()["chunks_indexed"] >= 1
+    indexed = _run_job(client, "/api/ask/index", {"channel_id": "UC_x"})
+    assert indexed["status"] == "done"
+    assert indexed["result"]["chunks_indexed"] >= 1
 
     status = client.get("/api/ask/status", params={"channel": "UC_x"}).json()
     assert status["indexed_chunks"] >= 1
 
-    answered = client.post("/api/ask", json={"question": "what is this?", "channel_ids": ["UC_x"]})
-    assert answered.status_code == 200
-    data = answered.json()
+    answered = _run_job(client, "/api/ask", {"question": "what is this?", "channel_ids": ["UC_x"]})
+    assert answered["status"] == "done"
+    data = answered["result"]
     assert data["citations"]
     assert "](https://www.youtube.com/watch?v=vid00000001" in data["answer"]
 
 
-def test_ask_without_index_returns_400(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ask_without_index_errors(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed(client)
     monkeypatch.setattr("yttools.web.routes.api.embedding_provider", lambda settings: _FakeEmbed())
     monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("x"))
-    response = client.post("/api/ask", json={"question": "q", "channel_ids": ["UC_x"]})
-    assert response.status_code == 400
+    entry = _run_job(client, "/api/ask", {"question": "q", "channel_ids": ["UC_x"]})
+    assert entry["status"] == "error"
 
 
 def test_start_fetch_returns_job_id(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

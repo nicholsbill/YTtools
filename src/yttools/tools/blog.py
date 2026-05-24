@@ -21,6 +21,7 @@ from yttools.core.db import Database
 from yttools.core.exports import watch_url
 from yttools.core.llm import LLMError, LLMProvider
 from yttools.core.models import Transcript, Video
+from yttools.core.progress import ProgressCallback, report
 
 BlogLength = Literal["short", "medium", "long"]
 
@@ -142,9 +143,11 @@ async def generate_blog(
     length: BlogLength = "medium",
     title_override: str | None = None,
     model: str | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> BlogResult:
     """Generate a Markdown article from a stored video's transcript."""
     tone = tone or _DEFAULT_TONE
+    await report(on_progress, "Reading transcript", 0, 2)
     video = database.get_video(video_id)
     if video is None:
         raise BlogError(f"Video {video_id} is not in the database; fetch it first")
@@ -157,6 +160,7 @@ async def generate_blog(
         "publishable Markdown articles. " + tone
     )
     prompt = _build_prompt(video, transcript, length=length)
+    await report(on_progress, "Generating the article", 1, 2)
     try:
         raw = await provider.complete(
             prompt,
@@ -172,6 +176,7 @@ async def generate_blog(
     article = _parse_article(raw)
     if not article.sections:
         raise BlogError("Model returned no article sections")
+    await report(on_progress, "Done", 2, 2)
     markdown = _render_markdown(video, article, title_override=title_override)
     return BlogResult(
         video_id=video_id,

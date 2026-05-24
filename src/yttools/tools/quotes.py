@@ -23,6 +23,7 @@ from yttools.core.db import Database
 from yttools.core.exports import watch_url
 from yttools.core.llm import LLMError, LLMProvider
 from yttools.core.models import Quote, QuoteType, Transcript
+from yttools.core.progress import ProgressCallback, report
 
 _QUOTE_TYPES: tuple[str, ...] = get_args(QuoteType)
 _DEFAULT_TYPE: QuoteType = "statement"
@@ -142,6 +143,7 @@ async def extract_quotes(
     video_ids: list[str],
     quote_types: list[str] | None = None,
     model: str | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> QuotesResult:
     """Extract and persist quotes for the given videos, replacing prior quotes."""
     if not video_ids:
@@ -149,8 +151,10 @@ async def extract_quotes(
     wanted = {t for t in (quote_types or _QUOTE_TYPES) if t in _QUOTE_TYPES}
     model_used = model or getattr(provider, "default_model", None)
     out: list[QuoteOut] = []
+    total = len(video_ids)
 
-    for video_id in video_ids:
+    for position, video_id in enumerate(video_ids, start=1):
+        await report(on_progress, f"Extracting quotes ({position}/{total})", position, total)
         video = database.get_video(video_id)
         transcript = database.get_transcript(video_id)
         if video is None or transcript is None or not transcript.text.strip():

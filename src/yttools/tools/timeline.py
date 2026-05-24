@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from yttools.core.db import Database
 from yttools.core.llm import LLMProvider
+from yttools.core.progress import ProgressCallback, report
 from yttools.tools.summarize import ensure_channel_topics
 
 _TOKEN = re.compile(r"[a-z0-9]{3,}")
@@ -90,9 +91,16 @@ def _assemble(topic_months: dict[str, list[str]]) -> TimelineResult:
 
 
 async def _auto(
-    database: Database, provider: LLMProvider, channel_id: str, model: str | None
+    database: Database,
+    provider: LLMProvider,
+    channel_id: str,
+    model: str | None,
+    on_progress: ProgressCallback | None = None,
 ) -> TimelineResult:
-    await ensure_channel_topics(database, provider, channel_id, model=model)
+    await report(on_progress, "Extracting topics")
+    await ensure_channel_topics(
+        database, provider, channel_id, model=model, on_progress=on_progress
+    )
     rows = database.list_video_topics(channel_id)
     totals: Counter[str] = Counter(row["label"] for row in rows)
     top_labels = {label for label, _ in totals.most_common(_TOP_TOPICS)}
@@ -150,10 +158,12 @@ async def build_timeline(
     mode: str = "auto",
     topics: list[str] | None = None,
     model: str | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> TimelineResult:
     """Build a topic-over-time view for a channel."""
     if database.get_channel(channel_id) is None:
         raise TimelineError(f"Channel {channel_id} is not in the database")
     if mode == "specific":
+        await report(on_progress, "Scanning transcripts")
         return _specific(database, channel_id, topics or [])
-    return await _auto(database, provider, channel_id, model)
+    return await _auto(database, provider, channel_id, model, on_progress)

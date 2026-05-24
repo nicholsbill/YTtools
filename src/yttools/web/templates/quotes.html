@@ -56,6 +56,7 @@
           <button type="button" class="hover:text-accent" @click="download('md')">Markdown</button>
         </span>
       </template>
+      <span x-show="running" class="text-xs text-zinc-500" x-text="progress"></span>
       <span x-show="error" class="text-sm text-accent" x-text="error"></span>
     </div>
   </form>

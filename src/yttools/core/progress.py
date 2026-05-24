@@ -10,12 +10,23 @@ process as the worker pool, so no broker or external service is involved.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 _TERMINAL_EVENTS = {"job_done", "job_error", "job_cancelled"}
+
+# A step reporter the tools call as they work: (message, current, total).
+ProgressCallback = Callable[[str, int, int], Awaitable[None]]
+
+
+async def report(
+    callback: ProgressCallback | None, message: str, current: int = 0, total: int = 0
+) -> None:
+    """Invoke a progress callback if one was supplied. A no-op otherwise."""
+    if callback is not None:
+        await callback(message, current, total)
 
 
 class ProgressEvent(BaseModel):

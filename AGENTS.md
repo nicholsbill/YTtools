@@ -121,6 +121,14 @@ Record non-obvious choices here as they are made.
   `fetch.youtube_options_from_settings`. Cookies are the reliable fix; the
   browser source wins over a cookies file when both are set. Default fetch
   concurrency is 2 for the same reason.
+- **AI-tool jobs:** the AI tools run as background tasks so they survive client
+  navigation. `api._start_job` stores `{status, progress, result, detail}` in
+  `app.state.job_results` and runs the tool in `app.state.tasks`; the browser
+  polls `GET /api/jobs/{id}`. This is separate from Fetch, which uses the
+  SSE progress bus. Each tool entry function takes an optional
+  `on_progress: ProgressCallback` (`core/progress.report` is the no-op-safe
+  caller); the CLI passes `None`, so it stays synchronous. The browser remembers
+  the active job id per tool in `localStorage` to reconnect after navigation.
 - **`--ignore-no-formats-error`:** the metadata and caption calls pass this flag.
   Even with `--skip-download`, yt-dlp runs media format selection, and for some
   videos/clients it aborts with "Requested format is not available". We only

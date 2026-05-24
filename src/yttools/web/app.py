@@ -50,6 +50,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.bus = get_bus()
         app.state.jobs = {}
         app.state.tasks = set()
+        # Background AI-tool jobs: job_id -> {status, progress, result, detail}.
+        app.state.job_results = {}
         try:
             yield
         finally:

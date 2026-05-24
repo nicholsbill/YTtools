@@ -25,6 +25,7 @@
               class="rounded bg-accent px-4 py-2 text-white text-sm font-medium disabled:opacity-50">
         <span x-text="running ? 'Comparing…' : 'Compare'"></span>
       </button>
+      <span x-show="running" class="text-xs text-zinc-500" x-text="progress"></span>
       <span x-show="error" class="text-sm text-accent" x-text="error"></span>
     </div>
   </form>
