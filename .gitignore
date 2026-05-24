@@ -187,6 +187,11 @@ jobs/
 OPERATOR_NOTES.md
 OPERATOR_NOTES.*
 
+# Local working docs (agent orientation + running status). AGENTS.md is the
+# committed contributor guide; these two stay local.
+CLAUDE.md
+progress.md
+
 # Any file marked private by naming convention
 *_PRIVATE.md
 *.private
