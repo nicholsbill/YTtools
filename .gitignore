@@ -169,6 +169,10 @@ exports/
 *.vtt
 *.srt
 
+# Test fixtures are committed even though they share the extensions above.
+!tests/fixtures/*.vtt
+!tests/fixtures/*.srt
+
 # Ollama model cache (when configured to a project-local path)
 .ollama/
 
