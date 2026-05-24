@@ -271,6 +271,10 @@ async def get_video_metadata(
         "--dump-single-json",
         "--skip-download",
         "--no-warnings",
+        # We only want metadata and captions, never the media. Without this,
+        # yt-dlp still runs media format selection and aborts the whole video
+        # with "Requested format is not available" when no format matches.
+        "--ignore-no-formats-error",
         *_extra_args(options),
         _watch_url(video_id),
     ]
@@ -302,6 +306,9 @@ async def download_captions(
     args = [
         "--skip-download",
         "--no-warnings",
+        # Keep a video with no selectable media format from failing the caption
+        # download; see get_video_metadata for the full explanation.
+        "--ignore-no-formats-error",
         "--write-subs",
         "--write-auto-subs",
         "--sub-langs",

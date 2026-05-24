@@ -75,6 +75,7 @@ async def test_get_video_metadata_builds_model(monkeypatch: pytest.MonkeyPatch) 
     assert len(meta.chapters) == 2
     assert meta.published_at is not None
     assert "--skip-download" in captured["args"]
+    assert "--ignore-no-formats-error" in captured["args"]
 
 
 async def test_get_video_metadata_rejects_live(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,10 +112,11 @@ async def test_download_captions_returns_path(
     def write_vtt(_args: list[str]) -> None:
         (tmp_path / "vid00000001.en.vtt").write_text("WEBVTT\n", encoding="utf-8")
 
-    _install_runner(monkeypatch, 0, "", side_effect=write_vtt)
+    captured = _install_runner(monkeypatch, 0, "", side_effect=write_vtt)
     result = await youtube.download_captions("vid00000001", tmp_path, languages=["en"])
     assert result is not None
     assert result.suffix == ".vtt"
+    assert "--ignore-no-formats-error" in captured["args"]
 
 
 async def test_download_captions_none_when_missing(

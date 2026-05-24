@@ -112,6 +112,12 @@ Record non-obvious choices here as they are made.
   `fetch.youtube_options_from_settings`. Cookies are the reliable fix; the
   browser source wins over a cookies file when both are set. Default fetch
   concurrency is 2 for the same reason.
+- **`--ignore-no-formats-error`:** the metadata and caption calls pass this flag.
+  Even with `--skip-download`, yt-dlp runs media format selection, and for some
+  videos/clients it aborts with "Requested format is not available". We only
+  need metadata and subtitles, so the flag lets extraction continue. Verified:
+  forcing `-f 999` reproduces the error, and adding the flag still writes the
+  VTT.
 - **Settings save:** the web `/api/settings` handler writes through the raw config
   file (`config.set_config_value`), never through env-resolved `Settings`, so an
   API key supplied via an environment variable is never copied to `config.toml`.

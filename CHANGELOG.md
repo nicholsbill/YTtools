@@ -20,6 +20,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The default fetch concurrency dropped from 3 to 2 parallel videos to reduce
   the chance of being flagged as a bot.
 
+### Fixed
+
+- Fetch no longer marks a video as an error with "Requested format is not
+  available" when yt-dlp cannot select a media format. Because YTtools only
+  needs metadata and captions, the metadata and caption calls now pass
+  `--ignore-no-formats-error`, so subtitles are still extracted.
+
 ## [0.1.0] - 2026-05-24
 
 First public release: the storage layer, the Fetch tool, and the Search tool.

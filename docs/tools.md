@@ -17,6 +17,9 @@ yttools fetch URL --refresh --lang en
 - Re-runs skip videos that already have a transcript unless `--refresh` is passed
   or the stored copy is more than seven days old.
 - Private, deleted, members-only, and live videos are logged and skipped.
+- Captions are still extracted from videos that offer no downloadable media
+  format, so a "Requested format is not available" yt-dlp error no longer fails
+  the video.
 
 ### When YouTube asks you to "confirm you're not a bot"
 
