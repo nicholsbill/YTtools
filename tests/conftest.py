@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from yttools.config import API_KEY_ENV_VARS
+from yttools.core.db import Database
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -26,6 +27,16 @@ def tmp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture
 def fixtures_dir() -> Path:
     return FIXTURES_DIR
+
+
+@pytest.fixture
+def db(tmp_path: Path) -> Iterator[Database]:
+    """A migrated, file-backed database in a temporary directory."""
+    database = Database.open(tmp_path / "test.db")
+    try:
+        yield database
+    finally:
+        database.close()
 
 
 @pytest.fixture(autouse=True)
