@@ -86,17 +86,55 @@ class _Toolbox:
             "url": watch_url(row["video_id"]),
         }
 
+    def _video_obj(self, video: Any) -> dict[str, Any]:
+        return {
+            "video_id": video.id,
+            "title": video.title,
+            "views": video.view_count,
+            "likes": video.like_count,
+            "comments": video.comment_count,
+            "published": video.published_at.date().isoformat() if video.published_at else None,
+            "duration": format_clock(float(video.duration_seconds))
+            if video.duration_seconds
+            else None,
+            "url": watch_url(video.id),
+        }
+
+    def _ranked(
+        self, channel_ids: list[str] | None, by: str, limit: int, channel: Any
+    ) -> dict[str, Any]:
+        metric = {"views": "view_count", "likes": "like_count", "comments": "comment_count"}.get(
+            by, "view_count"
+        )
+        videos = self.db.list_videos(channel_ids[0] if channel_ids else None)
+        ranked = sorted(
+            (v for v in videos if getattr(v, metric) is not None),
+            key=lambda v: getattr(v, metric) or 0,
+            reverse=True,
+        )[:limit]
+        return {
+            "channel": channel,
+            "by": by,
+            "total_videos": len(videos),
+            "videos": [self._video_obj(v) for v in ranked],
+        }
+
     def search_videos(
         self, query: Any, channel: Any = None, limit: Any = _SEARCH_LIMIT
     ) -> dict[str, Any]:
         channel_ids, error = self._resolve_channel(channel)
         if error:
             return {"error": error}
+        capped = max(1, min(int(limit or _SEARCH_LIMIT), 50))
+        if not str(query or "").strip():
+            # An empty query is most useful as "the top videos", not an error.
+            result = self._ranked(channel_ids, "views", capped, channel)
+            result["note"] = "No search words given; returning top videos by views."
+            return result
         try:
             match = build_match_query(str(query))
         except SearchError:
-            return {"error": "empty or invalid query"}
-        capped = max(1, min(int(limit or _SEARCH_LIMIT), 50))
+            return {"error": "invalid query"}
         rows = self.db.search_fts(match, channel_ids=channel_ids, limit=capped)
         total = self.db.count_search_fts(match, channel_ids=channel_ids)
         return {
@@ -105,6 +143,13 @@ class _Toolbox:
             "match_count": total,
             "videos": [self._video_row(row) for row in rows],
         }
+
+    def top_videos(self, channel: Any = None, by: Any = "views", limit: Any = 10) -> dict[str, Any]:
+        channel_ids, error = self._resolve_channel(channel)
+        if error:
+            return {"error": error}
+        capped = max(1, min(int(limit or 10), 50))
+        return self._ranked(channel_ids, str(by), capped, channel)
 
     def channel_stats(self, channel: Any = None) -> dict[str, Any]:
         channel_ids, error = self._resolve_channel(channel)
@@ -206,6 +251,10 @@ class _Toolbox:
                 )
             if tool == "channel_stats":
                 return self.channel_stats(safe.get("channel"))
+            if tool == "top_videos":
+                return self.top_videos(
+                    safe.get("channel"), safe.get("by", "views"), safe.get("limit", 10)
+                )
             if tool == "compare_videos":
                 return self.compare_videos(safe.get("video_ids"))
             if tool == "content_search":
@@ -233,16 +282,21 @@ _SYSTEM = (
     "channel may be a name or id.\n"
     "- channel_stats(channel?): video_count, total/average views, total likes, and "
     "top videos by views for a channel (or all channels if omitted).\n"
+    "- top_videos(channel?, by?, limit?): the best-performing videos ranked by "
+    "'views' (default), 'likes', or 'comments'. Use this for best/worst questions.\n"
     "- compare_videos(video_ids): side-by-side stats and a transcript gist for the "
     "given video ids.\n"
     "- content_search(query, channel?): the most relevant transcript passages, each "
     "with a numbered reference and a timestamped link; use it for 'what did they "
     "say' questions and to cite sources with [n] markers.\n\n"
     "Guidelines: resolve channel names with list_channels if unsure; for counts use "
-    "search_videos and report match_count per channel; you only have views, likes, "
-    "comments, dates, durations, titles, and transcripts (no YouTube analytics like "
-    "watch time or click-through), so when asked why a video performed differently, "
-    "reason from those signals and say it is inferred."
+    "search_videos and report match_count per channel; for best/worst-performing "
+    "videos use top_videos or channel_stats. Always pass real search words to "
+    "search_videos (never an empty query). Do not repeat a tool call you have "
+    "already made — use the result you already have or answer. You only have views, "
+    "likes, comments, dates, durations, titles, and transcripts (no YouTube "
+    "analytics like watch time or click-through), so when asked why a video "
+    "performed differently, reason from those signals and say it is inferred."
 )
 
 
@@ -328,6 +382,7 @@ async def run_agent(
     toolbox = _Toolbox(database, embed_provider)
     scratchpad: list[dict[str, Any]] = []
     steps: list[str] = []
+    seen: set[str] = set()
 
     for step in range(1, max_steps + 1):
         await report(on_progress, f"Thinking (step {step})", step, max_steps)
@@ -343,6 +398,16 @@ async def run_agent(
             continue
         raw_args = action.get("args")
         args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
+        signature = json.dumps({"tool": tool, "args": args}, sort_keys=True, default=str)
+        if signature in seen:
+            scratchpad.append(
+                {
+                    "note": f"You already called {tool} with those arguments; "
+                    "use that result or give your answer."
+                }
+            )
+            continue
+        seen.add(signature)
         await report(on_progress, f"Running {tool}", step, max_steps)
         result = await toolbox.run(str(tool), args)
         steps.append(_describe(str(tool), args))

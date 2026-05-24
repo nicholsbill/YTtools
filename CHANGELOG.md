@@ -13,8 +13,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   per-channel stats, compare videos, and search transcript content — so it can
   answer questions like "how many steak challenges did each channel do?" or
   "why did one video get more views than another?" with figures computed from
-  the database (not guessed). The UI shows the steps it took. Works with any
-  provider via JSON mode; metadata questions work without an embedding index.
+  the database (not guessed). It has a `top_videos` tool for best/worst
+  questions, treats an empty search as "top videos" rather than erroring, and
+  skips repeated identical tool calls so it does not waste steps. The UI shows
+  the steps it took. Works with any provider via JSON mode; metadata questions
+  work without an embedding index.
 
 - Video stats are now visible and exportable. Fetch already stored view and like
   counts; this adds `comment_count`, shows views/likes/comments in search results

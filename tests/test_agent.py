@@ -74,6 +74,19 @@ def test_toolbox_channel_stats(db: Database) -> None:
     assert stats["total_views"] == 300
 
 
+def test_toolbox_top_videos_ranks_by_views(db: Database) -> None:
+    _seed(db)
+    top = _Toolbox(db, _FakeEmbed()).top_videos(by="views", limit=2)
+    assert [v["video_id"] for v in top["videos"]] == ["b1", "k2"]  # 5000, 200
+
+
+def test_toolbox_empty_query_returns_top_videos(db: Database) -> None:
+    _seed(db)
+    result = _Toolbox(db, _FakeEmbed()).search_videos("", channel="Katina")
+    assert "note" in result  # fell back instead of erroring
+    assert result["videos"]
+
+
 def test_toolbox_unknown_channel_is_an_error(db: Database) -> None:
     _seed(db)
     result = _Toolbox(db, _FakeEmbed()).search_videos("steak", channel="Nope")
@@ -127,9 +140,11 @@ async def test_agent_answers_without_an_index(db: Database) -> None:
     assert result.answer == "Katina has 2 videos."
 
 
-async def test_agent_forces_an_answer_after_max_steps(db: Database) -> None:
+async def test_agent_dedupes_repeated_calls_and_forces_answer(db: Database) -> None:
     _seed(db)
+    # The model keeps asking for the same thing; the guard runs it once, and after
+    # the step budget the agent still returns a graceful answer.
     provider = _ScriptedProvider([json.dumps({"tool": "list_channels", "args": {}})])
-    result = await run_agent(db, provider, _FakeEmbed(), "q", max_steps=2)
-    assert result.answer  # falls back to a graceful message
-    assert len(result.steps) == 2
+    result = await run_agent(db, provider, _FakeEmbed(), "q", max_steps=3)
+    assert result.answer
+    assert len(result.steps) == 1  # the duplicate calls were skipped
