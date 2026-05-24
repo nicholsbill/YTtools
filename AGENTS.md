@@ -1,0 +1,96 @@
+# AGENTS.md
+
+Context for contributors working in this repo, automated or otherwise. Read this
+before making changes.
+
+## Architecture
+
+YTtools is a single Python process that serves a local web UI (FastAPI + uvicorn)
+and exposes the same actions through a Typer CLI. All persistent state lives in a
+single SQLite file under `~/.yttools/` (override with `YTTOOLS_HOME`).
+
+Layering, from the bottom up:
+
+- `core/` — shared infrastructure with no tool-specific logic: database access and
+  migrations (`db.py`), Pydantic models (`models.py`), URL parsing (`urls.py`),
+  yt-dlp wrappers (`youtube.py`), transcript parsing (`transcripts.py`), exporters
+  (`exports.py`), the SSE progress bus (`progress.py`), the LLM provider
+  abstraction (`llm.py`), and embedding helpers (`embeddings.py`).
+- `tools/` — one module per user-facing tool. Tools depend on `core/`, never the
+  reverse. v0.1.0 ships `fetch.py` and `search.py`; the rest are added in later
+  releases.
+- `web/` — the FastAPI app factory, route handlers (`routes/`), Jinja2 templates,
+  and static assets.
+- `cli.py` — Typer commands, one per tool plus `serve`, `config`, `db`, `version`.
+
+Eight tools are planned (Fetch, Search, Summarize, Compare, Quotes, Timeline,
+Blog, Ask). They share the storage layer. See the database schema in
+`core/migrations/` for the canonical data model.
+
+## Style
+
+- **Ruff** is the source of truth for linting and formatting. Run `ruff check .`
+  and `ruff format --check .` before committing. Line length is 100.
+- **mypy** runs in strict mode on `src/yttools/`. Run `mypy src/`.
+- **pytest** for tests. Run `pytest` (or `make test`).
+- **Pydantic v2** models throughout. No bare dicts in public function signatures.
+- **Async I/O** everywhere. Subprocess and HTTP calls use async APIs.
+- Docstrings on public functions and classes, Google-style.
+- A `Makefile` wraps the common commands: `make dev`, `make test`, `make check`,
+  `make format`, `make serve`.
+
+## Conventions
+
+- SQLite access goes through `core/db.py` only. No raw `sqlite3.connect` elsewhere.
+- LLM access goes through the provider abstraction in `core/llm.py` only.
+- No blocking I/O in route handlers. yt-dlp and provider HTTP calls are invoked
+  with async subprocess / async HTTP and bounded concurrency.
+- yt-dlp invocations always pass `--no-warnings` and use `--skip-download` for
+  metadata-only calls.
+- Schema changes are new numbered migration files under `core/migrations/`. Never
+  edit an applied migration; add a new one.
+- Commit messages follow Conventional Commits (see CONTRIBUTING.md).
+
+## Hard constraints
+
+These are enforced and checked before release:
+
+- Every Python source file starts with the two-line SPDX + copyright header:
+  ```python
+  # SPDX-License-Identifier: AGPL-3.0-or-later
+  # Copyright (C) 2025 William Nichols and YTtools contributors
+  ```
+- No telemetry, analytics, auto-update checks, or remote logging. The app runs
+  fully offline apart from the YouTube and LLM calls the user initiates.
+- Never log transcripts, full timestamped URLs, or LLM prompts/responses at INFO
+  or above. DEBUG only, and only when explicitly enabled.
+- No emojis in code, comments, docstrings, logs, or commit messages. UI status
+  badges may use Unicode glyphs (the `✓ ○ — ● △` set) where they carry meaning.
+- External AI/tool vendor names appear only where functionally required: LLM
+  provider class names in `core/llm.py`, provider labels in the Settings UI, and
+  `docs/llm-providers.md`. Nowhere else, and never as attribution.
+- A banned-vocabulary list is enforced in prose (README, docs, comments, UI copy,
+  error messages). Keep writing plain and direct.
+
+## What to avoid
+
+- New top-level dependencies without a clear, justified need.
+- Pinning minor versions in `pyproject.toml` unless required for compatibility.
+- Tests that require network access. Mock yt-dlp subprocess calls and LLM HTTP.
+
+## Local-only files
+
+The original design spec and the one-time `bootstrap.sh` setup script are kept out
+of version control (see `.git/info/exclude`); they are build inputs, not shipped
+artifacts. `OPERATOR_NOTES.md` is gitignored for the same reason.
+
+## Decisions and gotchas
+
+Record non-obvious choices here as they are made.
+
+- **Package name:** `yttools` (confirmed available on PyPI at build time).
+- **Env var names for API keys:** the hosted-provider keys follow the conventional
+  `<PROVIDER>_API_KEY` form. The exact names live in `docs/llm-providers.md`.
+- **v0.1.0 provider scope:** the local Ollama provider is fully wired. The three
+  hosted providers exist with health checks and config plumbing, but `complete()`
+  and `stream()` raise `NotImplementedError` pointing at v0.2.0.

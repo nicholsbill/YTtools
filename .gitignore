@@ -1,0 +1,252 @@
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# =============================================================================
+# Virtual environments
+# =============================================================================
+.venv/
+venv/
+ENV/
+env/
+.python-version
+.tool-versions
+
+# =============================================================================
+# Testing and quality tools
+# =============================================================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+nosetests.xml
+.cache
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Linters and formatters
+.ruff_cache/
+.pylint.d/
+
+# =============================================================================
+# Editors and IDEs
+# =============================================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.spyderproject
+.spyproject
+.ropeproject
+
+# Local editor and agent working directories
+.history/
+.local/
+.assistant/
+.agent/
+.agents/
+
+# =============================================================================
+# Operating systems
+# =============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.directory
+.fuse_hidden*
+.nfs*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# =============================================================================
+# Secrets and local config
+# =============================================================================
+.env
+.env.*
+!.env.example
+*.local
+*.local.toml
+*.local.yml
+*.local.yaml
+*.local.json
+secrets/
+.secrets/
+credentials.json
+client_secrets.json
+token.json
+service-account*.json
+
+# =============================================================================
+# YTtools runtime state
+# =============================================================================
+# Local data directories (when YTTOOLS_HOME is set to a project path)
+.yttools/
+data/
+runtime/
+
+# SQLite database files (database lives at ~/.yttools/ by default;
+# this catches any project-local development databases)
+yttools.db
+yttools.db-wal
+yttools.db-shm
+yttools.db-journal
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# Transcript artifacts and exports
+transcripts/
+exports/
+*.vtt
+*.srt
+
+# Ollama model cache (when configured to a project-local path)
+.ollama/
+
+# Job and progress state
+jobs/
+.progress/
+
+# =============================================================================
+# Private project files
+# =============================================================================
+# Operator playbook (commercial pricing, LLC notes, internal strategy)
+OPERATOR_NOTES.md
+OPERATOR_NOTES.*
+
+# Any file marked private by naming convention
+*_PRIVATE.md
+*.private
+*.private.*
+PRIVATE/
+private/
+
+# Signed CLA records (if mirrored locally instead of via CLA Assistant)
+signed_clas/
+contributor_records/
+
+# Commercial license agreements (executed contracts, customer data)
+commercial_licenses/
+customer_contracts/
+
+# =============================================================================
+# Build and deployment artifacts
+# =============================================================================
+node_modules/
+.npm
+.yarn-integrity
+package-lock.json
+yarn.lock
+
+# Generated documentation
+site/
+_site/
+docs/_build/
+docs/.doctrees/
+
+# Profiling
+*.prof
+*.lprof
+profile_*.txt
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# =============================================================================
+# Miscellaneous
+# =============================================================================
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+
+# Archive files (unless intentionally committed)
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+
+# Generated files
+*.generated.*
+generated/
