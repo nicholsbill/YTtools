@@ -131,6 +131,11 @@ Record non-obvious choices here as they are made.
   the active job id per tool in `localStorage` to reconnect after navigation.
   `app.state.job_tasks` maps job id to the task so `POST /api/jobs/{id}/cancel`
   can cancel it; the runner catches `CancelledError` and records "cancelled".
+- **`x-html` must be sanitized:** content shown via Alpine `x-html` can be
+  influenced by attacker-controlled transcripts (prompt-injection to XSS).
+  `renderMarkdown` runs `marked` output through DOMPurify (and degrades to
+  escaped text if a CDN lib is missing); the search snippet/highlight helpers
+  escape first. Never feed unescaped model/transcript text to `x-html`.
 - **Cost estimates:** providers accumulate token usage on `self.usage` (a
   `Usage`) from each completion response; `estimate_cost(model, usage)` prices it
   against the approximate `_PRICING` table in `core/llm.py`. `api._job_cost`

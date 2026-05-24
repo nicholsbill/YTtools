@@ -277,9 +277,15 @@ function settingsPanel(currentDefault) {
   };
 }
 
+// Render model-generated Markdown to HTML. The content is influenced by
+// attacker-controllable transcripts, so the HTML is always sanitized with
+// DOMPurify before it reaches x-html. If either library is missing (e.g. the
+// CDN is blocked offline) we fall back to escaped plain text, never raw HTML.
 function renderMarkdown(md) {
-  if (window.marked && typeof window.marked.parse === "function") {
-    return window.marked.parse(md);
+  const haveMarked = window.marked && typeof window.marked.parse === "function";
+  const havePurify = window.DOMPurify && typeof window.DOMPurify.sanitize === "function";
+  if (haveMarked && havePurify) {
+    return window.DOMPurify.sanitize(window.marked.parse(md));
   }
   return `<pre class="whitespace-pre-wrap">${escapeHtml(md)}</pre>`;
 }

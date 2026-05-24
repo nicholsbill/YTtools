@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Sanitize model-generated Markdown before rendering it. The Blog, Summarize,
+  and Ask views render Markdown via Alpine `x-html`, and that content is
+  influenced by attacker-controllable video transcripts/titles — a
+  prompt-injection-to-XSS path. `renderMarkdown` now runs the `marked` output
+  through DOMPurify, and falls back to escaped plain text if either library is
+  unavailable. (Search snippets were already escaped.)
+
 ## [0.3.0] - 2026-05-24
 
 ### Added
