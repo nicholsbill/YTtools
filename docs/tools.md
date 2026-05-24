@@ -1,7 +1,7 @@
 # Tools
 
-YTtools is a set of tools over one shared transcript store. Two ship in v0.1.0;
-the rest are planned for later releases.
+YTtools is a set of tools over one shared transcript store. All eight tools are
+implemented: Fetch, Search, Summarize, Compare, Quotes, Timeline, Blog, and Ask.
 
 ## Fetch (v0.1.0)
 
@@ -128,7 +128,24 @@ yttools timeline CHANNEL_ID --mode specific --topic rust --topic "web assembly"
   named topics against transcripts.
 - The web view (`/timeline`) renders a stacked-area chart plus a stats table.
 
-## Planned
+## Ask
 
-- **Ask** (v0.3.0): retrieval-augmented question answering over a channel, with
-  cited answers that deep-link to the source moments.
+Local retrieval-augmented question answering over a channel.
+
+```bash
+yttools ask index CHANNEL_ID                 # build the embedding index (Ollama)
+yttools ask query "what does the host think about X?" --channel CHANNEL_ID
+```
+
+- Indexing chunks and embeds each transcript locally with Ollama and stores the
+  vectors in `chunk_embeddings`. Re-running skips already-indexed videos unless
+  `--force` is passed.
+- A query embeds the question, retrieves the nearest chunks (cosine similarity,
+  reranked by recency), and returns an answer that cites its sources; each `[n]`
+  marker links to the moment it came from.
+- The embedding step always runs locally (Ollama); only the answer step uses the
+  configured default provider, so switching providers does not require
+  re-indexing.
+
+All eight tools now ship. Remaining work is v1.0.0 polish (documentation site,
+coverage, performance, and accessibility passes).

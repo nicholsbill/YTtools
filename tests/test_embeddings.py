@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from yttools.core.embeddings import chunk_transcript, embed_chunks, index_transcript
+from yttools.core.embeddings import chunk_transcript, embed_chunks
 from yttools.core.models import Segment
 
 
@@ -77,8 +77,3 @@ async def test_embed_chunks_empty_returns_empty() -> None:
             raise AssertionError("should not be called for empty input")
 
     assert await embed_chunks(FakeProvider(), []) == []  # type: ignore[arg-type]
-
-
-def test_index_transcript_is_stubbed() -> None:
-    with pytest.raises(NotImplementedError, match=r"v0\.3\.0"):
-        index_transcript()

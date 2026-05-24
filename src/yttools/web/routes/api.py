@@ -21,6 +21,7 @@ from yttools.config import load_settings
 from yttools.core import exports
 from yttools.core.db import Database
 from yttools.core.llm import build_provider, build_providers, get_provider
+from yttools.tools.ask import AskError, ask_question, embedding_provider, index_channel
 from yttools.tools.blog import BlogError, BlogLength, generate_blog
 from yttools.tools.compare import CompareError, compare_channels
 from yttools.tools.fetch import FetchConfig, FetchJob, youtube_options_from_settings
@@ -67,6 +68,16 @@ class TimelineRequest(BaseModel):
     channel_id: str
     mode: str = "auto"  # "auto" or "specific"
     topics: list[str] = Field(default_factory=list)
+
+
+class AskIndexRequest(BaseModel):
+    channel_id: str
+    force: bool = False
+
+
+class AskRequest(BaseModel):
+    question: str
+    channel_ids: list[str] = Field(default_factory=list)
 
 
 class ProviderSettingUpdate(BaseModel):
@@ -211,6 +222,42 @@ async def timeline_endpoint(request: Request, payload: TimelineRequest) -> dict[
             topics=payload.topics,
         )
     except (TimelineError, NotImplementedError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return result.model_dump()
+
+
+@router.get("/ask/status")
+async def ask_status(request: Request, channel: str | None = None) -> dict[str, Any]:
+    database = _db(request)
+    channels = [channel] if channel else None
+    count = await asyncio.to_thread(database.count_chunk_embeddings, channels)
+    return {"indexed_chunks": count}
+
+
+@router.post("/ask/index")
+async def ask_index_endpoint(request: Request, payload: AskIndexRequest) -> dict[str, Any]:
+    embed = embedding_provider(request.app.state.settings)
+    try:
+        result = await index_channel(_db(request), embed, payload.channel_id, force=payload.force)
+    except AskError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return result.model_dump()
+
+
+@router.post("/ask")
+async def ask_endpoint(request: Request, payload: AskRequest) -> dict[str, Any]:
+    settings = request.app.state.settings
+    embed = embedding_provider(settings)
+    answer = get_provider(settings)
+    try:
+        result = await ask_question(
+            _db(request),
+            embed,
+            answer,
+            payload.question,
+            channel_ids=payload.channel_ids or None,
+        )
+    except (AskError, NotImplementedError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return result.model_dump()
 

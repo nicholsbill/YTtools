@@ -31,6 +31,9 @@ app.add_typer(config_app, name="config")
 db_app = typer.Typer(help="Database maintenance commands.", no_args_is_help=True)
 app.add_typer(db_app, name="db")
 
+ask_app = typer.Typer(help="Ask questions about a channel (local RAG).", no_args_is_help=True)
+app.add_typer(ask_app, name="ask")
+
 
 def _open_db() -> Database:
     return Database.open(load_settings().db_path)
@@ -328,6 +331,64 @@ def timeline(
             f"  {stat.topic}: {stat.total} video(s) "
             f"({stat.first_month} -> {stat.last_month}, peak {stat.peak_month})"
         )
+
+
+@ask_app.command("index")
+def ask_index(
+    channel_id: str = typer.Argument(..., help="Channel id to index."),
+    force: bool = typer.Option(False, "--force", help="Re-index already-indexed videos."),
+) -> None:
+    """Embed a channel's transcripts for question answering (uses Ollama)."""
+    from yttools.tools.ask import AskError, embedding_provider, index_channel
+
+    settings = load_settings()
+    database = _open_db()
+    try:
+        result = asyncio.run(
+            index_channel(database, embedding_provider(settings), channel_id, force=force)
+        )
+    except AskError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        database.close()
+    typer.echo(
+        f"Indexed {result.videos_indexed} video(s), {result.chunks_indexed} new chunk(s); "
+        f"{result.total_chunks} total."
+    )
+
+
+@ask_app.command("query")
+def ask_query(
+    question: str = typer.Argument(..., help="The question to answer."),
+    channel: str | None = typer.Option(None, "--channel", help="Restrict to a channel id."),
+) -> None:
+    """Answer a question from indexed transcripts, with citations."""
+    from yttools.core.llm import get_provider
+    from yttools.tools.ask import AskError, ask_question, embedding_provider
+
+    settings = load_settings()
+    database = _open_db()
+    try:
+        result = asyncio.run(
+            ask_question(
+                database,
+                embedding_provider(settings),
+                get_provider(settings),
+                question,
+                channel_ids=[channel] if channel else None,
+            )
+        )
+    except AskError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        database.close()
+    typer.echo(result.answer)
+    if result.citations:
+        typer.echo("\nSources:")
+        for citation in result.citations:
+            typer.echo(f"  [{citation.index}] {citation.title} — {citation.url}")
 
 
 @app.command("list")

@@ -17,10 +17,11 @@ Layering, from the bottom up:
   (`exports.py`), the SSE progress bus (`progress.py`), the LLM provider
   abstraction (`llm.py`), and embedding helpers (`embeddings.py`).
 - `tools/` — one module per user-facing tool. Tools depend on `core/`, never the
-  reverse. Shipped so far: `fetch.py`, `search.py`, `blog.py`, `summarize.py`,
-  `quotes.py`, `compare.py`, and `timeline.py`; Ask is added in a later release.
-  Compare and Timeline reuse `summarize.ensure_channel_topics` to populate the
-  topic tables on first use.
+  reverse. All eight ship: `fetch.py`, `search.py`, `summarize.py`, `compare.py`,
+  `quotes.py`, `timeline.py`, `blog.py`, and `ask.py`. Compare and Timeline reuse
+  `summarize.ensure_channel_topics` to populate the topic tables on first use.
+  Ask embeds transcripts into `chunk_embeddings` (a portable table, brute-force
+  cosine search) and always embeds via Ollama regardless of the answer provider.
 - `web/` — the FastAPI app factory, route handlers (`routes/`), Jinja2 templates,
   and static assets.
 - `cli.py` — Typer commands, one per tool plus `serve`, `config`, `db`, `version`.

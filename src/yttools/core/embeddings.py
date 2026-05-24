@@ -70,15 +70,6 @@ async def embed_chunks(provider: LLMProvider, chunks: list[Chunk]) -> list[list[
     return await provider.embed([chunk.text for chunk in chunks])
 
 
-def index_transcript(*args: object, **kwargs: object) -> None:
-    """Persist chunk embeddings into the vector table.
-
-    Wired up in v0.3.0 with the Ask tool; the vector store is not populated in
-    v0.1.0.
-    """
-    raise NotImplementedError("Transcript indexing arrives in v0.3.0 with the Ask tool.")
-
-
 __all__ = [
     "DEFAULT_OVERLAP_WORDS",
     "DEFAULT_TARGET_WORDS",
@@ -86,5 +77,4 @@ __all__ = [
     "Chunk",
     "chunk_transcript",
     "embed_chunks",
-    "index_transcript",
 ]

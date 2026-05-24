@@ -598,3 +598,84 @@ function timelinePanel() {
     },
   };
 }
+
+function askPanel() {
+  return {
+    channels: [],
+    channelId: "",
+    indexedChunks: 0,
+    indexing: false,
+    asking: false,
+    error: "",
+    question: "",
+    answer: "",
+    rendered: "",
+    citations: [],
+    clock,
+    async loadChannels() {
+      try {
+        this.channels = await (await fetch("/api/channels")).json();
+      } catch (_) {
+        this.channels = [];
+      }
+      this.refreshStatus();
+    },
+    async refreshStatus() {
+      try {
+        const q = this.channelId ? `?channel=${encodeURIComponent(this.channelId)}` : "";
+        this.indexedChunks = (await (await fetch(`/api/ask/status${q}`)).json()).indexed_chunks;
+      } catch (_) {
+        this.indexedChunks = 0;
+      }
+    },
+    async index() {
+      if (!this.channelId) return;
+      this.error = "";
+      this.indexing = true;
+      try {
+        const response = await fetch("/api/ask/index", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channel_id: this.channelId }),
+        });
+        if (!response.ok) {
+          this.error = (await response.json()).detail || "Indexing failed.";
+          return;
+        }
+        await this.refreshStatus();
+      } catch (_) {
+        this.error = "Could not reach the server.";
+      } finally {
+        this.indexing = false;
+      }
+    },
+    async ask() {
+      if (!this.question) return;
+      this.error = "";
+      this.asking = true;
+      this.answer = "";
+      this.citations = [];
+      try {
+        const body = { question: this.question };
+        if (this.channelId) body.channel_ids = [this.channelId];
+        const response = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!response.ok) {
+          this.error = (await response.json()).detail || "Failed.";
+          return;
+        }
+        const data = await response.json();
+        this.answer = data.answer;
+        this.rendered = renderMarkdown(data.answer);
+        this.citations = data.citations;
+      } catch (_) {
+        this.error = "Could not reach the server.";
+      } finally {
+        this.asking = false;
+      }
+    },
+  };
+}

@@ -49,7 +49,19 @@ def _seed(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize(
-    "path", ["/", "/fetch", "/search", "/settings", "/blog", "/summarize", "/quotes"]
+    "path",
+    [
+        "/",
+        "/fetch",
+        "/search",
+        "/settings",
+        "/blog",
+        "/summarize",
+        "/quotes",
+        "/compare",
+        "/timeline",
+        "/ask",
+    ],
 )
 def test_pages_render(client: TestClient, path: str) -> None:
     response = client.get(path)
@@ -264,6 +276,42 @@ def test_timeline_specific_endpoint(client: TestClient, monkeypatch: pytest.Monk
     data = response.json()
     assert data["mode"] == "specific"
     assert "2024-03" in data["months"]
+
+
+class _FakeEmbed:
+    name = "emb"
+    default_model = "e"
+
+    async def embed(self, texts: list[str], model: str | None = None) -> list[list[float]]:
+        return [[1.0, 0.0, 1.0] for _ in texts]
+
+
+def test_ask_index_and_query(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed(client)
+    monkeypatch.setattr("yttools.web.routes.api.embedding_provider", lambda settings: _FakeEmbed())
+    monkeypatch.setattr(
+        "yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("Answer [1].")
+    )
+    indexed = client.post("/api/ask/index", json={"channel_id": "UC_x"})
+    assert indexed.status_code == 200
+    assert indexed.json()["chunks_indexed"] >= 1
+
+    status = client.get("/api/ask/status", params={"channel": "UC_x"}).json()
+    assert status["indexed_chunks"] >= 1
+
+    answered = client.post("/api/ask", json={"question": "what is this?", "channel_ids": ["UC_x"]})
+    assert answered.status_code == 200
+    data = answered.json()
+    assert data["citations"]
+    assert "](https://www.youtube.com/watch?v=vid00000001" in data["answer"]
+
+
+def test_ask_without_index_returns_400(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed(client)
+    monkeypatch.setattr("yttools.web.routes.api.embedding_provider", lambda settings: _FakeEmbed())
+    monkeypatch.setattr("yttools.web.routes.api.get_provider", lambda settings: _FakeProvider("x"))
+    response = client.post("/api/ask", json={"question": "q", "channel_ids": ["UC_x"]})
+    assert response.status_code == 400
 
 
 def test_start_fetch_returns_job_id(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

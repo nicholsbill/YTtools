@@ -23,7 +23,7 @@ NAV_ITEMS: list[dict[str, Any]] = [
     {"key": "quotes", "label": "Quotes", "href": "/quotes", "enabled": True},
     {"key": "timeline", "label": "Timeline", "href": "/timeline", "enabled": True},
     {"key": "blog", "label": "Blog", "href": "/blog", "enabled": True},
-    {"key": "ask", "label": "Ask", "href": "#", "enabled": False},
+    {"key": "ask", "label": "Ask", "href": "/ask", "enabled": True},
 ]
 
 
@@ -92,6 +92,11 @@ async def compare_page(request: Request) -> HTMLResponse:
 @router.get("/timeline", response_class=HTMLResponse)
 async def timeline_page(request: Request) -> HTMLResponse:
     return _render(request, "timeline.html", "timeline")
+
+
+@router.get("/ask", response_class=HTMLResponse)
+async def ask_page(request: Request) -> HTMLResponse:
+    return _render(request, "ask.html", "ask")
 
 
 @router.get("/settings", response_class=HTMLResponse)

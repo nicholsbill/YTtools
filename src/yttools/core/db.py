@@ -532,6 +532,69 @@ class Database:
         )
         return [dict(row) for row in rows]
 
+    # -- chunk embeddings (Ask) -----------------------------------------
+
+    def delete_chunks_for_video(self, video_id: str) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM chunk_embeddings WHERE video_id = ?", (video_id,))
+            self._conn.commit()
+
+    def add_chunk_embeddings(
+        self, rows: list[tuple[str, str | None, int, float, str, str]]
+    ) -> None:
+        """Insert chunk rows: (video_id, channel_id, chunk_index, start, text, embedding_json)."""
+        if not rows:
+            return
+        with self._lock:
+            self._conn.executemany(
+                "INSERT INTO chunk_embeddings"
+                " (video_id, channel_id, chunk_index, start_seconds, text, embedding)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            self._conn.commit()
+
+    def video_is_indexed(self, video_id: str) -> bool:
+        row = self._fetchone(
+            "SELECT 1 FROM chunk_embeddings WHERE video_id = ? LIMIT 1", (video_id,)
+        )
+        return row is not None
+
+    def count_chunk_embeddings(self, channel_ids: list[str] | None = None) -> int:
+        if channel_ids:
+            placeholders = ", ".join("?" for _ in channel_ids)
+            row = self._fetchone(
+                f"SELECT COUNT(*) AS n FROM chunk_embeddings WHERE channel_id IN ({placeholders})",
+                tuple(channel_ids),
+            )
+        else:
+            row = self._fetchone("SELECT COUNT(*) AS n FROM chunk_embeddings")
+        return int(row["n"]) if row else 0
+
+    def list_chunk_embeddings(self, channel_ids: list[str] | None = None) -> list[dict[str, Any]]:
+        """Return chunk rows with parsed embeddings, joined to video title and date."""
+        sql = (
+            "SELECT ce.video_id, ce.start_seconds, ce.text, ce.embedding,"
+            " v.title AS video_title, v.published_at"
+            " FROM chunk_embeddings ce JOIN videos v ON v.id = ce.video_id"
+        )
+        params: tuple[Any, ...] = ()
+        if channel_ids:
+            placeholders = ", ".join("?" for _ in channel_ids)
+            sql += f" WHERE ce.channel_id IN ({placeholders})"
+            params = tuple(channel_ids)
+        return [
+            {
+                "video_id": row["video_id"],
+                "video_title": row["video_title"],
+                "start_seconds": row["start_seconds"],
+                "text": row["text"],
+                "embedding": json.loads(row["embedding"]),
+                "published_at": row["published_at"],
+            }
+            for row in self._fetchall(sql, params)
+        ]
+
     # -- search ----------------------------------------------------------
 
     def search_fts(

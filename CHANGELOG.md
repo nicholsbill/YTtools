@@ -34,6 +34,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the topic tables or tracking free-text topics matched against transcripts.
   Renders a stacked-area chart (Chart.js) plus per-topic timing stats. Web
   (`/timeline`), API (`POST /api/timeline`), CLI (`yttools timeline`).
+- Ask tool: local retrieval-augmented question answering over a channel. Indexing
+  chunks and embeds transcripts (locally via Ollama) into a portable
+  `chunk_embeddings` table; queries embed the question, retrieve the nearest
+  chunks by cosine similarity reranked with recency, and return a cited answer
+  whose `[n]` markers link to the source moments. Web (`/ask`), API
+  (`POST /api/ask`, `POST /api/ask/index`), CLI (`yttools ask index` / `query`).
 - Settings page highlights the active model provider with an "Active" badge.
 - Fetch can authenticate to YouTube with cookies to clear the "sign in to
   confirm you're not a bot" gate. Configure `youtube.cookies_from_browser` or
