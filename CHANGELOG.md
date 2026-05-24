@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-05-24
+
 ### Security
 
 - Neutralize CSV formula injection in the Quotes export. Quote text, video
