@@ -297,3 +297,11 @@ def get_provider(settings: Settings, name: str | None = None) -> LLMProvider:
 
 
 PROVIDER_NAMES: tuple[str, ...] = ("ollama", "anthropic", "openai", "gemini")
+
+# Hosted providers whose completion path is deferred. Exported so tests can
+# iterate them without spelling out vendor names elsewhere in the codebase.
+HOSTED_PROVIDER_CLASSES: tuple[type[_HostedStubProvider], ...] = (
+    AnthropicProvider,
+    OpenAIProvider,
+    GeminiProvider,
+)

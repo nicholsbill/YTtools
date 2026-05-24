@@ -11,10 +11,9 @@ import pytest
 
 from yttools.config import Settings
 from yttools.core.llm import (
-    AnthropicProvider,
-    GeminiProvider,
+    HOSTED_PROVIDER_CLASSES,
+    PROVIDER_NAMES,
     OllamaProvider,
-    OpenAIProvider,
     ProviderHealth,
     build_providers,
     get_provider,
@@ -96,7 +95,7 @@ async def test_health_check_unavailable_on_connection_error() -> None:
     assert "Could not reach" in health.message
 
 
-@pytest.mark.parametrize("provider_cls", [AnthropicProvider, OpenAIProvider, GeminiProvider])
+@pytest.mark.parametrize("provider_cls", HOSTED_PROVIDER_CLASSES)
 async def test_hosted_complete_not_implemented(provider_cls) -> None:
     provider = provider_cls("some-model", "key-123")
     with pytest.raises(NotImplementedError):
@@ -106,15 +105,16 @@ async def test_hosted_complete_not_implemented(provider_cls) -> None:
 
 
 async def test_hosted_stream_not_implemented() -> None:
-    provider = AnthropicProvider("m", "k")
+    provider = HOSTED_PROVIDER_CLASSES[0]("m", "k")
     with pytest.raises(NotImplementedError):
         async for _ in provider.stream("q"):
             pass
 
 
 async def test_hosted_health_reflects_key() -> None:
-    with_key = await OpenAIProvider("m", "secret").health_check()
-    without_key = await OpenAIProvider("m", "").health_check()
+    provider_cls = HOSTED_PROVIDER_CLASSES[0]
+    with_key = await provider_cls("m", "secret").health_check()
+    without_key = await provider_cls("m", "").health_check()
     assert with_key.available is False
     assert "configured" in with_key.message.lower()
     assert "no api key" in without_key.message.lower()
@@ -122,8 +122,8 @@ async def test_hosted_health_reflects_key() -> None:
 
 def test_build_providers_covers_all() -> None:
     providers = build_providers(Settings())
-    assert set(providers) == {"ollama", "anthropic", "openai", "gemini"}
-    assert isinstance(providers["ollama"], OllamaProvider)
+    assert set(providers) == set(PROVIDER_NAMES)
+    assert isinstance(providers[PROVIDER_NAMES[0]], OllamaProvider)
 
 
 def test_get_provider_defaults_to_ollama() -> None:

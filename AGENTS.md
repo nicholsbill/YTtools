@@ -112,3 +112,18 @@ Record non-obvious choices here as they are made.
 - **SSE timing:** the fetch UI POSTs to start a job, then opens the EventSource.
   Early per-video events can be missed if the job outruns the subscription, but
   the terminal `job_done` event always carries the full summary.
+- **Where vendor provider names may appear:** only `core/llm.py` (provider
+  classes), `config.py` (config schema and default model identifiers),
+  `web/templates/settings.html` (UI labels), and `docs/llm-providers.md`.
+  `config.py` is functionally required for the config plumbing and is the one
+  location beyond the spec's stated three. Tests reference providers indirectly
+  through `PROVIDER_NAMES` and `HOSTED_PROVIDER_CLASSES` so vendor names stay out
+  of the test suite. The word "cursor" in the source is always a SQLite cursor or
+  an offset variable, never the editor.
+- **CI coverage gate:** the gate is core-only. CI runs
+  `pytest -o addopts="" --cov=yttools.core --cov-fail-under=70` so it measures
+  `core/` rather than the whole package (the default `addopts` covers everything).
+- **Packaging:** hatchling includes the `templates/`, `static/`, and
+  `migrations/` data files because they live inside the package tree. A
+  fresh-venv install of the built wheel was verified to serve the UI and run the
+  CLI with no source checkout present.
