@@ -1,0 +1,18 @@
+{
+  "id": "aaaaaaaaaa1",
+  "title": "First Video",
+  "description": "A recorded sample for tests.",
+  "channel_id": "UCsT0YIqwnpJCM-mx7-gSA4Q",
+  "channel": "Sample Channel",
+  "uploader_id": "@sample",
+  "channel_follower_count": 12345,
+  "timestamp": 1700000000,
+  "duration": 600,
+  "view_count": 1000,
+  "like_count": 100,
+  "thumbnail": "https://i.ytimg.com/vi/aaaaaaaaaa1/hqdefault.jpg",
+  "chapters": [{"start_time": 0.0, "title": "Intro"}],
+  "tags": ["sample", "test"],
+  "live_status": "not_live",
+  "availability": "public"
+}

@@ -74,6 +74,10 @@ src = ["src", "tests"]
 select = ["E", "F", "W", "I", "B", "UP", "ANN", "RUF"]
 ignore = ["ANN401"]
 
+[tool.ruff.lint.flake8-bugbear]
+# Typer's API requires Argument()/Option() calls as parameter defaults.
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"]
 "src/yttools/**/__init__.py" = ["F401"]
