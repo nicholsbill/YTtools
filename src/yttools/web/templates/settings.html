@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %} — Settings{% endblock %}
+{% block content %}
+<div x-data="settingsPanel('{{ provider }}')" x-init="load()" class="max-w-3xl space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold mb-1">Settings</h1>
+    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+      Configure model providers. The local provider works out of the box; hosted
+      providers store an API key and become usable in a later release.
+    </p>
+  </div>
+
+  <div class="flex items-center gap-3 text-sm">
+    <span class="text-zinc-500 dark:text-zinc-400">Default provider</span>
+    <select x-model="defaultProvider"
+            class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+      <template x-for="p in providers" :key="p.name">
+        <option :value="p.name" x-text="p.name"></option>
+      </template>
+    </select>
+  </div>
+
+  <div class="space-y-4">
+    <template x-for="p in providers" :key="p.name">
+      <div class="border border-zinc-200 dark:border-zinc-800 rounded p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span x-text="statusGlyph(p)" :class="p.available ? 'text-green-500' : 'text-zinc-400'"></span>
+            <span class="font-medium capitalize" x-text="p.name"></span>
+            <span x-show="!p.functional"
+                  class="rounded bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 text-xs text-zinc-500">
+              Available in v0.2.0
+            </span>
+          </div>
+          <button @click="test(p.name)"
+                  class="rounded border border-zinc-300 dark:border-zinc-700 px-3 py-1 text-xs">
+            Test connection
+          </button>
+        </div>
+
+        <p class="text-xs text-zinc-500 dark:text-zinc-400" x-text="p.message"></p>
+
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <label class="flex flex-col gap-1">
+            <span class="text-zinc-500 dark:text-zinc-400">Model</span>
+            <template x-if="p.name === 'ollama' && p.models.length">
+              <select x-model="p.default_model"
+                      class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+                <template x-for="m in p.models" :key="m"><option :value="m" x-text="m"></option></template>
+              </select>
+            </template>
+            <template x-if="!(p.name === 'ollama' && p.models.length)">
+              <input type="text" x-model="p.default_model"
+                     class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+            </template>
+          </label>
+
+          <template x-if="p.name === 'ollama'">
+            <label class="flex flex-col gap-1">
+              <span class="text-zinc-500 dark:text-zinc-400">Base URL</span>
+              <input type="text" x-model="ollamaBaseUrl"
+                     class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 font-mono">
+            </label>
+          </template>
+          <template x-if="p.name !== 'ollama'">
+            <label class="flex flex-col gap-1">
+              <span class="text-zinc-500 dark:text-zinc-400">API key</span>
+              <input type="password" x-model="p.api_key"
+                     :placeholder="p.key_set ? p.key_masked : 'not set'"
+                     class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 font-mono">
+            </label>
+          </template>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <div class="flex items-center gap-3">
+    <button @click="save()"
+            class="rounded bg-accent px-4 py-2 text-white text-sm font-medium">Save changes</button>
+    <span x-show="saved" class="text-sm text-green-500">Saved</span>
+  </div>
+</div>
+{% endblock %}

@@ -28,6 +28,9 @@ app = typer.Typer(
 config_app = typer.Typer(help="Read and write configuration values.", no_args_is_help=True)
 app.add_typer(config_app, name="config")
 
+db_app = typer.Typer(help="Database maintenance commands.", no_args_is_help=True)
+app.add_typer(db_app, name="db")
+
 
 def _open_db() -> Database:
     return Database.open(load_settings().db_path)
@@ -157,6 +160,76 @@ def list_items(
             raise typer.Exit(code=1)
     finally:
         database.close()
+
+
+@app.command()
+def serve(
+    host: str | None = typer.Option(None, "--host", help="Bind address."),
+    port: int | None = typer.Option(None, "--port", help="Bind port."),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Do not open a browser."),
+    reload: bool = typer.Option(False, "--reload", help="Auto-reload on code changes (dev)."),
+) -> None:
+    """Start the local web UI."""
+    import uvicorn
+
+    from yttools.web.app import open_browser_when_ready
+
+    settings = load_settings()
+    bind_host = host or settings.server.host
+    bind_port = port or settings.server.port
+    if settings.server.open_browser and not no_browser:
+        open_browser_when_ready(f"http://{bind_host}:{bind_port}")
+    uvicorn.run(
+        "yttools.web.app:create_app",
+        factory=True,
+        host=bind_host,
+        port=bind_port,
+        reload=reload,
+    )
+
+
+@db_app.command("migrate")
+def db_migrate() -> None:
+    """Apply any unapplied database migrations."""
+    database = _open_db()
+    applied = database.migrate()
+    database.close()
+    typer.echo(f"Applied {len(applied)} migration(s).")
+
+
+@db_app.command("backup")
+def db_backup() -> None:
+    """Write a timestamped copy of the database file."""
+    import shutil
+    from datetime import UTC, datetime
+
+    settings = load_settings()
+    source = settings.db_path
+    if not source.exists():
+        typer.echo("No database to back up yet.", err=True)
+        raise typer.Exit(code=1)
+    database = _open_db()
+    database._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    database.close()
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    target = source.with_name(f"yttools.backup-{stamp}.db")
+    shutil.copy2(source, target)
+    typer.echo(f"Backed up to {target}")
+
+
+@db_app.command("reset")
+def db_reset(
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+) -> None:
+    """Delete the database and recreate an empty schema."""
+    settings = load_settings()
+    if not yes:
+        typer.confirm(f"This deletes {settings.db_path} and all stored data. Continue?", abort=True)
+    for suffix in ("", "-wal", "-shm"):
+        candidate = settings.db_path.with_name(settings.db_path.name + suffix)
+        candidate.unlink(missing_ok=True)
+    _open_db().close()
+    typer.echo("Database reset.")
 
 
 def main() -> None:

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Copyright (C) 2025 William Nichols and YTtools contributors
+-->
+<html lang="en" x-data="{ dark: (localStorage.getItem('yttools-theme') ?? 'dark') === 'dark' }"
+      :class="{ 'dark': dark }">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YTtools{% block title %}{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: { extend: { colors: { accent: "#ef4444" } } },
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js"></script>
+</head>
+<body class="bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+  <div class="flex min-h-screen">
+    <aside class="w-52 shrink-0 border-r border-zinc-200 dark:border-zinc-800 flex flex-col">
+      <div class="px-4 py-4 text-lg font-semibold">
+        YT<span class="text-accent">tools</span>
+      </div>
+      <nav class="flex-1 px-2 space-y-1 text-sm">
+        {% for item in nav_items %}
+          {% if item.enabled %}
+            <a href="{{ item.href }}"
+               class="block rounded px-3 py-2 hover:bg-zinc-200 dark:hover:bg-zinc-800
+                      {% if item.key == active %}bg-zinc-200 dark:bg-zinc-800 font-medium text-accent{% endif %}">
+              {{ item.label }}
+            </a>
+          {% else %}
+            <span class="block rounded px-3 py-2 text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
+                  title="Coming soon">{{ item.label }}</span>
+          {% endif %}
+        {% endfor %}
+      </nav>
+      <div class="px-2 pb-3">
+        <a href="/settings"
+           class="block rounded px-3 py-2 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800
+                  {% if active == 'settings' %}bg-zinc-200 dark:bg-zinc-800 font-medium text-accent{% endif %}">
+          Settings
+        </a>
+      </div>
+    </aside>
+
+    <div class="flex-1 flex flex-col">
+      <header class="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-3">
+        <div class="text-sm text-zinc-500 dark:text-zinc-400">
+          YTtools <span class="font-mono">v{{ version }}</span>
+        </div>
+        <div class="flex items-center gap-4 text-sm">
+          <span class="rounded bg-zinc-200 dark:bg-zinc-800 px-2 py-1 font-mono text-xs">
+            provider: {{ provider }}
+          </span>
+          <a class="text-zinc-500 hover:text-accent"
+             href="https://github.com/nicholsbill/YTtools" target="_blank" rel="noopener">Source</a>
+          <button @click="dark = !dark; localStorage.setItem('yttools-theme', dark ? 'dark' : 'light')"
+                  class="rounded border border-zinc-300 dark:border-zinc-700 px-2 py-1 text-xs">
+            <span x-text="dark ? 'Light' : 'Dark'"></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="flex-1 px-6 py-6 overflow-auto">
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="border-t border-zinc-200 dark:border-zinc-800 px-6 py-2 text-xs
+                     text-zinc-500 dark:text-zinc-400"
+              x-data="statusBar({{ stats.video_count }}, {{ stats.active_jobs }})"
+              x-init="start()">
+        <span>Active jobs: <span class="font-mono" x-text="activeJobs"></span></span>
+        <span class="mx-3">•</span>
+        <span>Videos in database: <span class="font-mono" x-text="videoCount"></span></span>
+        <span class="mx-3">•</span>
+        <span>Last fetch: <span class="font-mono">{{ stats.last_fetch }}</span></span>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

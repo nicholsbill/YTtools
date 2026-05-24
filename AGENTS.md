@@ -94,3 +94,21 @@ Record non-obvious choices here as they are made.
 - **v0.1.0 provider scope:** the local Ollama provider is fully wired. The three
   hosted providers exist with health checks and config plumbing, but `complete()`
   and `stream()` raise `NotImplementedError` pointing at v0.2.0.
+- **Database connection:** one `sqlite3` connection opened with
+  `check_same_thread=False` and guarded by a lock. Async callers wrap DB calls in
+  `asyncio.to_thread`. This is plenty for a local single-user app and sidesteps
+  "database is locked" churn.
+- **sqlite-vec `chunks` table:** sqlite-vec 0.1.x rejects `REAL` for auxiliary
+  columns (use `float`) and the table is created in code, not in the SQL
+  migration, since it needs a loadable extension. Its creation is wrapped so any
+  incompatibility disables vector features rather than breaking the schema.
+- **Caption source:** yt-dlp output does not reliably distinguish manual from
+  auto captions, so transcripts are stored with `is_auto_generated=True`.
+- **Settings save:** the web `/api/settings` handler writes through the raw config
+  file (`config.set_config_value`), never through env-resolved `Settings`, so an
+  API key supplied via an environment variable is never copied to `config.toml`.
+- **Front end:** Tailwind and Alpine load from a CDN (no build step, per spec).
+  The UI degrades to unstyled-but-functional when offline.
+- **SSE timing:** the fetch UI POSTs to start a job, then opens the EventSource.
+  Early per-video events can be missed if the job outruns the subscription, but
+  the terminal `job_done` event always carries the full summary.

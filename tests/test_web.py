@@ -1,0 +1,148 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2025 William Nichols and YTtools contributors
+"""Tests for the FastAPI web layer using the in-process test client."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from yttools.config import Settings
+from yttools.core import youtube
+from yttools.core.db import Database
+from yttools.core.llm import PROVIDER_NAMES
+from yttools.core.models import Channel, Segment, Transcript, Video
+from yttools.web.app import create_app
+
+LOCAL_PROVIDER = PROVIDER_NAMES[0]
+HOSTED_PROVIDER = next(name for name in PROVIDER_NAMES if name != LOCAL_PROVIDER)
+
+
+@pytest.fixture
+def client(tmp_home: Path) -> Iterator[TestClient]:
+    app = create_app()
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def _seed(client: TestClient) -> None:
+    database: Database = client.app.state.db
+    database.upsert_channel(Channel(id="UC_x", title="Example Channel"))
+    database.upsert_video(
+        Video(id="vid00000001", channel_id="UC_x", title="A Talk", duration_seconds=600)
+    )
+    database.upsert_transcript(
+        Transcript(
+            video_id="vid00000001",
+            language="en",
+            is_auto_generated=True,
+            text="we discuss machine learning and vector search",
+            segments=[
+                Segment(start=12.0, end=18.0, text="we discuss machine learning and vector search")
+            ],
+        )
+    )
+
+
+@pytest.mark.parametrize("path", ["/", "/fetch", "/search", "/settings"])
+def test_pages_render(client: TestClient, path: str) -> None:
+    response = client.get(path)
+    assert response.status_code == 200
+    assert "YTtools" in response.text
+
+
+def test_stats_empty(client: TestClient) -> None:
+    data = client.get("/api/stats").json()
+    assert data["video_count"] == 0
+    assert data["active_jobs"] == 0
+
+
+def test_channels_after_seed(client: TestClient) -> None:
+    _seed(client)
+    channels = client.get("/api/channels").json()
+    assert channels == [{"id": "UC_x", "title": "Example Channel"}]
+
+
+def test_search_endpoint(client: TestClient) -> None:
+    _seed(client)
+    data = client.get("/api/search", params={"q": "machine"}).json()
+    assert data["total"] == 1
+    result = data["results"][0]
+    assert result["video_id"] == "vid00000001"
+    assert "t=12s" in result["url"]
+
+
+def test_search_invalid_query_returns_400(client: TestClient) -> None:
+    response = client.get("/api/search", params={"q": "   "})
+    assert response.status_code == 400
+
+
+def test_video_detail_and_export(client: TestClient) -> None:
+    _seed(client)
+    detail = client.get("/api/video/vid00000001").json()
+    assert detail["transcript"]["language"] == "en"
+
+    export = client.get("/api/export/vid00000001", params={"fmt": "md"})
+    assert export.status_code == 200
+    assert "# A Talk" in export.text
+    assert "attachment" in export.headers["content-disposition"]
+
+
+def test_export_unknown_format_rejected(client: TestClient) -> None:
+    _seed(client)
+    response = client.get("/api/export/vid00000001", params={"fmt": "pdf"})
+    assert response.status_code == 422  # FastAPI rejects the invalid literal
+
+
+def test_export_missing_video_404(client: TestClient) -> None:
+    response = client.get("/api/export/missing", params={"fmt": "txt"})
+    assert response.status_code == 404
+
+
+def test_providers_listed(client: TestClient) -> None:
+    providers = client.get("/api/providers").json()
+    names = {p["name"] for p in providers}
+    assert names == set(PROVIDER_NAMES)
+    hosted = [p for p in providers if p["name"] != LOCAL_PROVIDER]
+    assert all(p["functional"] is False for p in hosted)
+
+
+def test_settings_save_persists(client: TestClient, tmp_home: Path) -> None:
+    model = getattr(Settings().llm, HOSTED_PROVIDER).default_model
+    response = client.post(
+        "/api/settings",
+        json={
+            "default_provider": LOCAL_PROVIDER,
+            "providers": {HOSTED_PROVIDER: {"default_model": model}},
+        },
+    )
+    assert response.json() == {"saved": True}
+    assert (tmp_home / "config.toml").exists()
+
+
+def test_settings_save_does_not_write_env_keys(
+    client: TestClient, tmp_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_var = f"{HOSTED_PROVIDER.upper()}_API_KEY"
+    monkeypatch.setenv(env_var, "sk-secret-from-env")
+    client.post("/api/settings", json={"default_provider": LOCAL_PROVIDER})
+    config_text = (tmp_home / "config.toml").read_text(encoding="utf-8")
+    assert "sk-secret-from-env" not in config_text
+
+
+def test_start_fetch_returns_job_id(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_runner(args: list[str], *, timeout: float = youtube.DEFAULT_TIMEOUT):
+        return 0, "", "ERROR: Private video"
+
+    monkeypatch.setattr(youtube, "_run_ytdlp", fake_runner)
+    response = client.post("/api/fetch", json={"urls": ["dQw4w9WgXcQ"]})
+    assert response.status_code == 200
+    assert "job_id" in response.json()
+
+
+def test_start_fetch_rejects_empty(client: TestClient) -> None:
+    response = client.post("/api/fetch", json={"urls": []})
+    assert response.status_code == 400

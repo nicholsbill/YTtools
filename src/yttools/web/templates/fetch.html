@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %} — Fetch{% endblock %}
+{% block content %}
+<div x-data="fetchPanel()" class="max-w-4xl space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold mb-1">Fetch</h1>
+    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+      Paste channel, playlist, or video URLs (one per line) to download their
+      transcripts and metadata into the local database.
+    </p>
+  </div>
+
+  <div class="space-y-4">
+    <textarea x-model="urls" rows="5" placeholder="https://www.youtube.com/@example"
+              class="w-full rounded border border-zinc-300 dark:border-zinc-700 bg-white
+                     dark:bg-zinc-900 p-3 font-mono text-sm"></textarea>
+
+    <div class="flex flex-wrap items-center gap-6 text-sm">
+      <label class="flex items-center gap-2">
+        <input type="radio" value="true" x-model="includeTranscripts">
+        Metadata + transcripts
+      </label>
+      <label class="flex items-center gap-2">
+        <input type="radio" value="false" x-model="includeTranscripts">
+        Metadata only
+      </label>
+      <label class="flex items-center gap-2">
+        Languages
+        <input type="text" x-model="languages"
+               class="w-24 rounded border border-zinc-300 dark:border-zinc-700 bg-white
+                      dark:bg-zinc-900 px-2 py-1 font-mono">
+      </label>
+      <label class="flex items-center gap-2">
+        <input type="checkbox" x-model="forceRefresh"> Force refresh
+      </label>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button @click="start()" :disabled="running"
+              class="rounded bg-accent px-4 py-2 text-white text-sm font-medium disabled:opacity-50">
+        <span x-text="running ? 'Fetching…' : 'Fetch'"></span>
+      </button>
+      <button @click="cancel()" x-show="running"
+              class="rounded border border-zinc-300 dark:border-zinc-700 px-4 py-2 text-sm">
+        Cancel
+      </button>
+      <span x-show="error" class="text-sm text-accent" x-text="error"></span>
+    </div>
+  </div>
+
+  <div x-show="total > 0" class="space-y-3">
+    <div class="h-2 w-full rounded bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+      <div class="h-full bg-accent transition-all"
+           :style="`width: ${total ? (completed / total * 100) : 0}%`"></div>
+    </div>
+    <div class="text-sm text-zinc-500 dark:text-zinc-400">
+      <span x-text="completed"></span> / <span x-text="total"></span> processed
+    </div>
+
+    <table class="w-full text-sm border-collapse">
+      <thead>
+        <tr class="text-left text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
+          <th class="py-2 w-8"></th>
+          <th class="py-2">Video</th>
+          <th class="py-2">Status</th>
+          <th class="py-2 w-48">Export</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="row in rows" :key="row.video_id">
+          <tr class="border-b border-zinc-100 dark:border-zinc-900">
+            <td class="py-2" x-text="badge(row.state)" :title="row.state"></td>
+            <td class="py-2">
+              <span x-text="row.title || row.video_id"></span>
+              <span class="block font-mono text-xs text-zinc-400" x-text="row.video_id"></span>
+            </td>
+            <td class="py-2 text-zinc-500 dark:text-zinc-400" x-text="row.message"></td>
+            <td class="py-2 space-x-2 text-xs">
+              <template x-if="row.state === 'done'">
+                <span>
+                  <template x-for="fmt in ['txt','md','srt','json']" :key="fmt">
+                    <a class="text-accent hover:underline"
+                       :href="`/api/export/${row.video_id}?fmt=${fmt}`" x-text="fmt"></a>
+                  </template>
+                </span>
+              </template>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

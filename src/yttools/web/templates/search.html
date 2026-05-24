@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %} — Search{% endblock %}
+{% block content %}
+<div x-data="searchPanel()" x-init="loadChannels()" class="max-w-4xl space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold mb-1">Search</h1>
+    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+      Full-text search across every stored transcript. Each result links to the
+      moment in the video.
+    </p>
+  </div>
+
+  <form @submit.prevent="run()" class="space-y-3">
+    <div class="flex gap-2">
+      <input type="text" x-model="query" placeholder="machine learning"
+             class="flex-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white
+                    dark:bg-zinc-900 px-3 py-2">
+      <button type="submit"
+              class="rounded bg-accent px-4 py-2 text-white text-sm font-medium">Search</button>
+    </div>
+
+    <div class="flex flex-wrap gap-4 text-sm items-end">
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">Channels</span>
+        <select multiple x-model="channelIds" class="rounded border border-zinc-300
+                dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 min-w-40 h-20">
+          <template x-for="c in channels" :key="c.id">
+            <option :value="c.id" x-text="c.title"></option>
+          </template>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">After</span>
+        <input type="date" x-model="publishedAfter"
+               class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">Before</span>
+        <input type="date" x-model="publishedBefore"
+               class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">Min minutes</span>
+        <input type="number" min="0" x-model="minMinutes"
+               class="w-24 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-zinc-500 dark:text-zinc-400">Max minutes</span>
+        <input type="number" min="0" x-model="maxMinutes"
+               class="w-24 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
+      </label>
+    </div>
+
+    <details class="text-sm text-zinc-500 dark:text-zinc-400">
+      <summary class="cursor-pointer">Query syntax</summary>
+      <ul class="mt-2 list-disc pl-5 space-y-1">
+        <li>Phrase: <span class="font-mono">"machine learning"</span></li>
+        <li>Boolean: <span class="font-mono">crypto AND NOT regulation</span></li>
+        <li>Prefix: <span class="font-mono">pyth*</span></li>
+      </ul>
+    </details>
+  </form>
+
+  <div x-show="searched">
+    <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-3">
+      <span x-text="total"></span> result(s)
+      <span x-show="error" class="text-accent" x-text="error"></span>
+    </p>
+    <div class="space-y-4">
+      <template x-for="result in results" :key="result.video_id + result.start_seconds">
+        <div class="border border-zinc-200 dark:border-zinc-800 rounded p-3">
+          <div class="flex items-center justify-between">
+            <a :href="result.url" target="_blank" rel="noopener"
+               class="font-medium text-accent hover:underline" x-text="result.title"></a>
+            <span class="text-xs text-zinc-400" x-text="result.channel_title"></span>
+          </div>
+          <p class="text-sm mt-1" x-html="render(result.snippet)"></p>
+          <div class="mt-2 text-xs">
+            <a :href="result.url" target="_blank" rel="noopener"
+               class="font-mono text-zinc-500 hover:text-accent"
+               x-text="'jump to ' + clock(result.start_seconds)"></a>
+            <button class="ml-3 text-zinc-500 hover:text-accent"
+                    @click="openTranscript(result.video_id)">view transcript</button>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div x-show="transcript" class="border-t border-zinc-200 dark:border-zinc-800 pt-4">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="font-medium" x-text="transcript?.video?.title"></h2>
+      <button class="text-sm text-zinc-500 hover:text-accent" @click="transcript = null">close</button>
+    </div>
+    <div class="max-h-96 overflow-auto space-y-1 text-sm">
+      <template x-for="(seg, i) in (transcript?.transcript?.segments || [])" :key="i">
+        <p>
+          <a :href="`https://www.youtube.com/watch?v=${transcript.video.id}&t=${Math.floor(seg.start)}s`"
+             target="_blank" rel="noopener"
+             class="font-mono text-xs text-zinc-400 hover:text-accent mr-2"
+             x-text="clock(seg.start)"></a>
+          <span x-html="highlight(seg.text)"></span>
+        </p>
+      </template>
+    </div>
+  </div>
+</div>
+{% endblock %}
