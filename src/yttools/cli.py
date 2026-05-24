@@ -103,6 +103,38 @@ def fetch(
     asyncio.run(runner())
 
 
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Search query (phrase, boolean, or prefix syntax)."),
+    channel: list[str] = typer.Option([], "--channel", help="Restrict to channel id(s)."),
+    limit: int = typer.Option(50, "--limit", help="Maximum results to return."),
+    json_output: bool = typer.Option(False, "--json", help="Emit results as JSON."),
+) -> None:
+    """Search transcripts and print ranked matches with timestamp links."""
+    from yttools.tools.search import SearchError, SearchFilters
+    from yttools.tools.search import search as run_search
+
+    database = _open_db()
+    try:
+        response = run_search(
+            database, query, filters=SearchFilters(channel_ids=channel), limit=limit
+        )
+    except SearchError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        database.close()
+
+    if json_output:
+        typer.echo(response.model_dump_json(indent=2))
+        return
+    typer.echo(f"{response.total} result(s) for {query!r}\n")
+    for result in response.results:
+        typer.echo(f"{result.title}")
+        typer.echo(f"  {result.url}")
+        typer.echo(f"  {result.snippet}\n")
+
+
 @app.command("list")
 def list_items(
     kind: str = typer.Argument(..., help="channels, playlists, or videos."),
