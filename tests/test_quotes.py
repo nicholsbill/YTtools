@@ -118,3 +118,28 @@ def test_export_formats() -> None:
     assert '"text": "Hi there"' in json_body
     md_body, _ = export_quotes(result, "md")
     assert "> Hi there" in md_body
+
+
+def test_csv_export_neutralizes_formula_injection() -> None:
+    result = QuotesResult(
+        total=1,
+        quotes=[
+            QuoteOut(
+                video_id="v",
+                video_title="=HYPERLINK('http://evil')",
+                text="=1+1",
+                quote_type="statement",
+                start_seconds=0.0,
+                url="https://youtu.be/x",
+                speaker_guess="@handle",
+                context="-2+3",
+            )
+        ],
+    )
+    csv_body, _ = export_quotes(result, "csv")
+    # Formula-leading cells are prefixed with a single quote so spreadsheets
+    # treat them as text rather than executing them.
+    assert "'=1+1" in csv_body
+    assert "'=HYPERLINK" in csv_body
+    assert "'@handle" in csv_body
+    assert "'-2+3" in csv_body

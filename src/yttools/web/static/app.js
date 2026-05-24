@@ -510,7 +510,10 @@ function summarizePanel() {
 }
 
 function csvCell(value) {
-  return `"${(value == null ? "" : String(value)).replace(/"/g, '""')}"`;
+  let text = value == null ? "" : String(value);
+  // Neutralize spreadsheet formula injection (cells starting with = + - @ etc.).
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 function quotesToCsv(rows) {

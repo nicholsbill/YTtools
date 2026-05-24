@@ -238,6 +238,18 @@ def load_quotes(
     return QuotesResult(total=len(quotes), quotes=quotes)
 
 
+# Leading characters a spreadsheet may interpret as a formula (CSV injection).
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: object) -> str:
+    """Neutralize spreadsheet formula injection by quoting formula-leading cells."""
+    text = "" if value is None else str(value)
+    if text and text[0] in _CSV_FORMULA_PREFIXES:
+        return "'" + text
+    return text
+
+
 def quotes_to_csv(result: QuotesResult) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -245,13 +257,13 @@ def quotes_to_csv(result: QuotesResult) -> str:
     for q in result.quotes:
         writer.writerow(
             [
-                q.text,
-                q.quote_type,
-                q.video_title,
-                q.start_seconds,
-                q.url,
-                q.speaker_guess,
-                q.context,
+                _csv_safe(q.text),
+                _csv_safe(q.quote_type),
+                _csv_safe(q.video_title),
+                _csv_safe(q.start_seconds),
+                _csv_safe(q.url),
+                _csv_safe(q.speaker_guess),
+                _csv_safe(q.context),
             ]
         )
     return buffer.getvalue()

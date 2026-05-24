@@ -6,6 +6,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Neutralize CSV formula injection in the Quotes export. Quote text, video
+  titles, speaker, and context come from transcripts/titles and LLM output; a
+  cell starting with `=`, `+`, `-`, or `@` could execute as a formula when the
+  CSV is opened in a spreadsheet. Such cells are now prefixed with `'`, in both
+  the CLI export and the web download.
+
 ## [0.3.1] - 2026-05-24
 
 ### Security
