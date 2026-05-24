@@ -46,7 +46,7 @@ class FetchRequest(BaseModel):
 
 class BlogRequest(BaseModel):
     video_id: str
-    tone: str = ""
+    style: str = ""
     length: BlogLength = "medium"
     title: str = ""
 
@@ -214,7 +214,7 @@ async def generate_blog_endpoint(request: Request, payload: BlogRequest) -> dict
             database,
             provider,
             payload.video_id,
-            tone=payload.tone or None,
+            style=payload.style or None,
             length=payload.length,
             title_override=payload.title or None,
             on_progress=on_progress,

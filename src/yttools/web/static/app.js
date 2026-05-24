@@ -278,7 +278,7 @@ function blogPanel() {
   return {
     videos: [],
     videoId: "",
-    tone: "",
+    style: "",
     length: "medium",
     title: "",
     running: false,
@@ -312,7 +312,7 @@ function blogPanel() {
         this,
         "blog",
         "/api/blog",
-        { video_id: this.videoId, tone: this.tone, length: this.length, title: this.title },
+        { video_id: this.videoId, style: this.style, length: this.length, title: this.title },
         (r) => this.apply(r)
       );
     },

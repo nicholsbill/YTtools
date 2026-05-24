@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Blog now writes an *original* piece in a style you choose (a `style` field /
+  `--style` flag — e.g. "a movie review by a film critic", "a TV newscaster
+  reporting on it") instead of reformatting the transcript. The transcript is
+  treated as source material, the model writes in the requested voice (not the
+  speakers'), and timestamp links move to an optional "Key moments" footer rather
+  than a forced section per transcript chunk. The `tone` field is renamed `style`.
+
 ## [0.2.0] - 2026-05-24
 
 ### Added

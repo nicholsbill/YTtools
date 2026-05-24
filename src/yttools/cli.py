@@ -155,11 +155,13 @@ def search(
 def blog(
     video_id: str = typer.Argument(..., help="Stored video id to convert."),
     length: str = typer.Option("medium", "--length", help="short, medium, or long."),
-    tone: str = typer.Option("", "--tone", help="Target tone (default: match the speaker)."),
+    style: str = typer.Option(
+        "", "--style", help="Format/voice, e.g. 'a movie review by a film critic'."
+    ),
     title: str = typer.Option("", "--title", help="Override the article title."),
     output: str | None = typer.Option(None, "--output", "-o", help="Write Markdown to a file."),
 ) -> None:
-    """Convert a stored video transcript into a Markdown article."""
+    """Write an original piece about a stored video, in a style you choose."""
     from pathlib import Path
 
     from yttools.core.llm import get_provider
@@ -178,7 +180,7 @@ def blog(
                 database,
                 provider,
                 video_id,
-                tone=tone or None,
+                style=style or None,
                 length=length,  # type: ignore[arg-type]
                 title_override=title or None,
             )

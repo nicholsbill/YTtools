@@ -64,20 +64,25 @@ yttools search "pyth*" --json
 
 ## Blog
 
-Turn a single stored video transcript into a publishable Markdown article.
+Write an *original* piece about a stored video, in a format and voice you choose.
+The transcript is the source material — the model composes something new (a
+review, a news report, an essay), it does not reformat or paraphrase the
+transcript.
 
 ```bash
-yttools blog VIDEO_ID --length medium --output article.md
-yttools blog VIDEO_ID --tone "plain and direct" --title "My title"
+yttools blog VIDEO_ID --style "a movie review in the style of a film critic"
+yttools blog VIDEO_ID --style "a TV newscaster reporting on it" --length long -o piece.md
 ```
 
-- Uses the default configured model provider (local Ollama or a hosted provider
-  with an API key set in Settings).
-- The model returns a title and sections; each section header gets a
-  `[Watch this section]` link to its YouTube timestamp.
-- Length presets target roughly 800 (short), 1500 (medium), or 2400 (long) words.
-- In the web UI (`/blog`), pick a fetched video and see a side-by-side rendered
-  preview and raw Markdown, with a download button.
+- `--style` is the key input: the format and persona. Default is a plain,
+  engaging blog post. The model writes in that voice and does not speak as the
+  people in the video (unless the style asks it to).
+- Uses the default model provider (local Ollama or a hosted provider with a key).
+- Length presets target roughly 700 (short), 1300 (medium), or 2200 (long) words.
+- Notable moments become an optional "Key moments" list of YouTube timestamp
+  links at the end.
+- In the web UI (`/blog`), pick a fetched video, describe the style, and see a
+  side-by-side rendered preview and raw Markdown, with a download button.
 
 ## Summarize
 

@@ -229,17 +229,19 @@ def test_videos_reports_transcript_flag(client: TestClient) -> None:
 def test_blog_generates_article(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed(client)
     payload = (
-        '{"title": "My Article", "sections": '
-        '[{"heading": "Intro", "start_seconds": 12, "markdown": "Body text."}]}'
+        '{"title": "My Article", "markdown": "An original piece.", '
+        '"key_moments": [{"label": "key bit", "start_seconds": 12}]}'
     )
     monkeypatch.setattr(
         "yttools.web.routes.api.get_provider", lambda settings: _FakeProvider(payload)
     )
-    entry = _run_job(client, "/api/blog", {"video_id": "vid00000001", "length": "short"})
+    entry = _run_job(
+        client, "/api/blog", {"video_id": "vid00000001", "length": "short", "style": "a review"}
+    )
     assert entry["status"] == "done"
     data = entry["result"]
     assert data["title"] == "My Article"
-    assert "## Intro" in data["markdown"]
+    assert "An original piece." in data["markdown"]
     assert "watch?v=vid00000001&t=12s" in data["markdown"]
     assert data["word_count"] > 0
 
@@ -404,7 +406,7 @@ def test_cancel_running_job(client: TestClient, monkeypatch: pytest.MonkeyPatch)
     deadline = time.time() + 5.0
     while time.time() < deadline:
         progress = client.get(f"/api/jobs/{job_id}").json()["progress"]
-        if progress["message"] == "Generating the article":
+        if progress["message"] == "Writing":
             break
         time.sleep(0.02)
     assert client.post(f"/api/jobs/{job_id}/cancel").status_code == 200

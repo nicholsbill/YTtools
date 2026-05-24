@@ -5,8 +5,9 @@
   <div>
     <h1 class="text-xl font-semibold mb-1">Blog</h1>
     <p class="text-sm text-zinc-500 dark:text-zinc-400">
-      Turn a stored video transcript into a Markdown article. Each section header
-      links back to the moment in the video. Uses the default model provider.
+      Write an original piece about a stored video, in any format and voice — a
+      review, a news report, an essay. The transcript is the source; the model
+      writes something new in the style you describe. Uses the default provider.
     </p>
   </div>
 
@@ -33,9 +34,10 @@
           <option value="long">Long</option>
         </select>
       </label>
-      <label class="flex flex-col gap-1 flex-1 min-w-48">
-        <span class="text-zinc-500 dark:text-zinc-400">Tone (optional)</span>
-        <input type="text" x-model="tone" placeholder="Match the speaker's voice"
+      <label class="flex flex-col gap-1 flex-1 min-w-64">
+        <span class="text-zinc-500 dark:text-zinc-400">Style / format</span>
+        <input type="text" x-model="style"
+               placeholder="e.g. a movie review in the style of Siskel & Ebert; or a TV newscaster reporting on it"
                class="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1">
       </label>
       <label class="flex flex-col gap-1 flex-1 min-w-48">
